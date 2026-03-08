@@ -1,0 +1,227 @@
+QWidget {
+    background-color: #1e1e1e;
+    color: #e0e0e0;
+    font-family: "Segoe UI", "Roboto", "Helvetica", sans-serif;
+    font-size: 14px;
+}
+
+QMainWindow {
+    background-color: #121212;
+}
+
+QGroupBox::title {
+    subcontrol-origin: margin;
+    left: 10px;
+    padding: 0 5px;
+    color: #4da6ff;
+}
+
+QPushButton {
+    background-color: #3d3d3d;
+    border: none;
+    border-radius: 4px;
+    padding: 4px 12px;
+    min-width: 80px;
+}
+
+QPushButton:hover {
+    background-color: #4d4d4d;
+}
+
+QPushButton#primaryButton {
+    background-color: #0066cc;
+    color: white;
+    font-weight: bold;
+}
+
+QPushButton#primaryButton:hover {
+    background-color: #0080ff;
+}
+
+QLineEdit, QSpinBox {
+    background-color: #2d2d2d;
+    border: 1px solid #3d3d3d;
+    border-radius: 4px;
+    padding: 2px;
+    color: white;
+}
+
+QSpinBox::up-button, QSpinBox::down-button {
+    width: 20px;
+    background-color: #3d3d3d;
+    border-left: 1px solid #1a1a1a;
+}
+
+QSpinBox::up-button:hover, QSpinBox::down-button:hover {
+    background-color: #4da6ff;
+}
+
+QSpinBox::up-arrow {
+    image: url(arrow_up.svg);
+    width: 8px;
+    height: 6px;
+}
+
+QSpinBox::down-arrow {
+    image: url(arrow_down.svg);
+    width: 8px;
+    height: 6px;
+}
+
+QGroupBox {
+    border: 1px solid #3d3d3d;
+    border-radius: 6px;
+    margin-top: 10px;
+    padding: 8px 6px 4px 6px;
+    font-weight: bold;
+}
+
+QListWidget {
+    background-color: #1a1a1a;
+    border: 1px solid #3d3d3d;
+    border-radius: 4px;
+    outline: none;
+}
+
+QListWidget::item {
+    padding: 4px 10px;
+    border-bottom: 1px solid #2d2d2d;
+}
+
+QListWidget::item:selected {
+    background-color: #264f78;
+}
+
+QProgressBar {
+    border: 1px solid #3d3d3d;
+    border-radius: 4px;
+    text-align: center;
+    background-color: #2d2d2d;
+    height: 15px;
+}
+
+QProgressBar::chunk {
+    background-color: #4da6ff;
+    width: 10px;
+}
+
+QLabel#titleLabel {
+    font-size: 16px;
+    font-weight: bold;
+    color: #ffffff;
+    margin-bottom: 2px;
+}
+
+QLabel#previewLabel {
+    background-color: #000000;
+}
+
+QLabel#updateIndicator {
+    color: #4da6ff;
+    font-style: italic;
+    font-size: 12px;
+    padding: 0 8px;
+}
+
+QLabel#loadingOverlay {
+    background-color: rgba(0, 0, 0, 200);
+    color: #4da6ff;
+    font-size: 36px;
+    font-weight: bold;
+}
+
+QScrollArea {
+    border: 1px solid #3d3d3d;
+    border-radius: 4px;
+    background-color: #000000;
+}
+
+QSlider::handle:horizontal {
+    background: #4da6ff;
+    width: 14px;
+    margin: -5px 0;
+    border-radius: 7px;
+}
+
+QSlider::groove:horizontal {
+    height: 4px;
+    background: #2d2d2d;
+    border-radius: 2px;
+}
+
+/* アイコンのみの小型ボタン */
+QPushButton#iconButton {
+    min-width: 0;
+    padding: 4px 6px;
+}
+
+/* 無効状態のグレーアウト */
+QSpinBox:disabled {
+    color: #555555;
+    background-color: #252525;
+    border-color: #2a2a2a;
+}
+
+QSpinBox::up-button:disabled, QSpinBox::down-button:disabled {
+    background-color: #2a2a2a;
+}
+
+QLabel:disabled {
+    color: #555555;
+}
+
+QCheckBox:disabled {
+    color: #555555;
+}
+
+QComboBox {
+    background-color: #2d2d2d;
+    border: 1px solid #3d3d3d;
+    border-radius: 4px;
+    padding: 2px 4px;
+    color: #e0e0e0;
+}
+
+QComboBox::drop-down {
+    width: 20px;
+    border-left: 1px solid #3d3d3d;
+    background-color: #3d3d3d;
+}
+
+QComboBox::down-arrow {
+    image: url(arrow_down.svg);
+    width: 8px;
+    height: 6px;
+}
+
+QComboBox QAbstractItemView {
+    background-color: #2d2d2d;
+    border: 1px solid #3d3d3d;
+    selection-background-color: #264f78;
+    color: #e0e0e0;
+}
+
+QComboBox:disabled {
+    color: #555555;
+    background-color: #252525;
+    border-color: #2a2a2a;
+}
+
+QPushButton:disabled {
+    color: #555555;
+    background-color: #2a2a2a;
+}
+
+QLineEdit:disabled {
+    color: #555555;
+    background-color: #252525;
+    border-color: #2a2a2a;
+}
+
+QSlider:disabled::handle:horizontal {
+    background: #444444;
+}
+
+QSlider:disabled::groove:horizontal {
+    background: #252525;
+}
