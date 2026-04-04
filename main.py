@@ -27,101 +27,101 @@ from PySide6.QtGui import QPixmap, QImage, QDragEnterEvent, QDropEvent, QPainter
 from image_processor import batch_process, apply_processing, apply_bit_dithering, apply_cv2_cleaning, Image
 
 # ---------------------------------------------------------------------------
-# 翻訳辞書 (ja / en)
+# 翻訳辞書 (ja / en / zh-CN / zh-TW)
 # ---------------------------------------------------------------------------
 _TRANSLATIONS = {
     # タイトル
-    "title_settings":       {"ja": "Settings",                "en": "Settings"},
+    "title_settings":       {"ja": "Settings",                "en": "Settings", "zh-CN": "设置", "zh-TW": "設定"},
     # グループボックス
-    "grp_input":            {"ja": "1. 読み込み",              "en": "1. Input"},
-    "grp_preprocess":       {"ja": "2. 前処理",                "en": "2. Preprocess"},
-    "grp_resize":           {"ja": "3. リサイズ",              "en": "3. Resize"},
-    "grp_grayscale":        {"ja": "4. グレースケール",        "en": "4. Grayscale"},
-    "grp_rename":           {"ja": "5. リネーム",              "en": "5. Rename"},
-    "grp_output_name":      {"ja": "6. 出力ファイル/フォルダ名", "en": "6. Output Name"},
-    "grp_format":           {"ja": "7. 保存形式",              "en": "7. Format"},
-    "grp_xtc":              {"ja": "8. XTC 詳細設定",          "en": "8. XTC Settings"},
+    "grp_input":            {"ja": "1. 読み込み",              "en": "1. Input", "zh-CN": "1. 加载", "zh-TW": "1. 載入"},
+    "grp_preprocess":       {"ja": "2. 前処理",                "en": "2. Preprocess", "zh-CN": "2. 预处理", "zh-TW": "2. 預處理"},
+    "grp_resize":           {"ja": "3. リサイズ",              "en": "3. Resize", "zh-CN": "3. 调整大小", "zh-TW": "3. 調整大小"},
+    "grp_grayscale":        {"ja": "4. グレースケール",        "en": "4. Grayscale", "zh-CN": "4. 灰度", "zh-TW": "4. 灰度"},
+    "grp_rename":           {"ja": "5. リネーム",              "en": "5. Rename", "zh-CN": "5. 重命名", "zh-TW": "5. 重新命名"},
+    "grp_output_name":      {"ja": "6. 出力ファイル/フォルダ名", "en": "6. Output Name", "zh-CN": "6. 输出文件/文件夹名", "zh-TW": "6. 輸出檔案/資料夾名"},
+    "grp_format":           {"ja": "7. 保存形式",              "en": "7. Format", "zh-CN": "7. 保存格式", "zh-TW": "7. 儲存格式"},
+    "grp_xtc":              {"ja": "8. XTC 詳細設定",          "en": "8. XTC Settings", "zh-CN": "8. XTC 详细设置", "zh-TW": "8. XTC 詳細設定"},
     "grp_list":             {"ja": "画像一覧 (ドラッグで並べ替え)",
-                             "en": "Images (Drag to Reorder)"},
+                             "en": "Images (Drag to Reorder)", "zh-CN": "图像列表 (拖拽排序)", "zh-TW": "圖像列表 (拖曳排序)"},
     "grp_preview":          {"ja": "プレビュー (ホイールズーム / ドラッグパン)",
-                             "en": "Preview (Wheel Zoom / Drag Pan)"},
+                             "en": "Preview (Wheel Zoom / Drag Pan)", "zh-CN": "预览 (滚轮缩放 / 拖拽平移)", "zh-TW": "預覽 (滾輪縮放 / 拖曳平移)"},
     # チェックボックス
-    "chk_auto_split":       {"ja": "自動分割",                "en": "Auto Split"},
-    "chk_auto_rotate":      {"ja": "自動回転",                "en": "Auto Rotate"},
-    "chk_auto_trim":        {"ja": "余白自動トリミング",      "en": "Auto Trim"},
-    "chk_no_resize":        {"ja": "リサイズなし",            "en": "No Resize"},
-    "lbl_preset":           {"ja": "プリセット:",             "en": "Preset:"},
-    "combo_preset_none":    {"ja": "なし",                    "en": "None"},
-    "chk_enable":           {"ja": "有効にする",              "en": "Enable"},
-    "chk_jpeg":             {"ja": "JPEG変換 (.jpg)",         "en": "JPEG Conv. (.jpg)"},
+    "chk_auto_split":       {"ja": "自動分割",                "en": "Auto Split", "zh-CN": "自动分割", "zh-TW": "自動分割"},
+    "chk_auto_rotate":      {"ja": "自動回転",                "en": "Auto Rotate", "zh-CN": "自动旋转", "zh-TW": "自動旋轉"},
+    "chk_auto_trim":        {"ja": "余白自動トリミング",      "en": "Auto Trim", "zh-CN": "自动裁剪白边", "zh-TW": "自動裁剪白邊"},
+    "chk_no_resize":        {"ja": "リサイズなし",            "en": "No Resize", "zh-CN": "不调整大小", "zh-TW": "不調整大小"},
+    "lbl_preset":           {"ja": "プリセット:",             "en": "Preset:", "zh-CN": "预设:", "zh-TW": "預設:"},
+    "combo_preset_none":    {"ja": "なし",                    "en": "None", "zh-CN": "无", "zh-TW": "無"},
+    "chk_enable":           {"ja": "有効にする",              "en": "Enable", "zh-CN": "启用", "zh-TW": "啟用"},
+    "chk_jpeg":             {"ja": "JPEG変換 (.jpg)",         "en": "JPEG Conv. (.jpg)", "zh-CN": "转为 JPEG (.jpg)", "zh-TW": "轉為 JPEG (.jpg)"},
     # ラベル
-    "lbl_blur":             {"ja": "ぼかし強度:",             "en": "Blur:"},
-    "lbl_max_w":            {"ja": "最大幅:",                 "en": "Max W:"},
-    "lbl_max_h":            {"ja": "最大高さ:",               "en": "Max H:"},
-    "lbl_align":            {"ja": "配置:",                   "en": "Align:"},
-    "lbl_sharpen":          {"ja": "シャープ:",               "en": "Sharpen:"},
-    "lbl_bits":             {"ja": "ビット数 (1-8):",         "en": "Bits (1-8):"},
-    "lbl_dither_algo":      {"ja": "ディザ算法:",             "en": "Dither:"},
-    "lbl_dither_int":       {"ja": "ディザ強度:",             "en": "Dither Int.:"},
-    "lbl_contrast":         {"ja": "コントラスト:",           "en": "Contrast:"},
-    "lbl_clahe":            {"ja": "CLAHE:",                  "en": "CLAHE:"},
-    "lbl_prefix":           {"ja": "接頭語:",                 "en": "Prefix:"},
-    "lbl_title":            {"ja": "タイトル:",               "en": "Title:"},
-    "lbl_author":           {"ja": "著者名:",                 "en": "Author:"},
-    "lbl_img_type":         {"ja": "画像形式:",               "en": "Img Type:"},
-    "lbl_direction":        {"ja": "綴じ方向:",               "en": "Direction:"},
-    "lbl_clean_type":       {"ja": "クリーンアップ種類:",     "en": "Cleanup:"},
-    "lbl_bg_clean":         {"ja": "背景クリーンアップ:",     "en": "BG Cleanup:"},
-    "lbl_zoom":             {"ja": "ズーム:",                 "en": "Zoom:"},
+    "lbl_blur":             {"ja": "ぼかし強度:",             "en": "Blur:", "zh-CN": "模糊强度:", "zh-TW": "模糊強度:"},
+    "lbl_max_w":            {"ja": "最大幅:",                 "en": "Max W:", "zh-CN": "最大宽度:", "zh-TW": "最大寬度:"},
+    "lbl_max_h":            {"ja": "最大高さ:",               "en": "Max H:", "zh-CN": "最大高度:", "zh-TW": "最大高度:"},
+    "lbl_align":            {"ja": "配置:",                   "en": "Align:", "zh-CN": "对齐:", "zh-TW": "對齊:"},
+    "lbl_sharpen":          {"ja": "シャープ:",               "en": "Sharpen:", "zh-CN": "锐化:", "zh-TW": "銳化:"},
+    "lbl_bits":             {"ja": "ビット数 (1-8):",         "en": "Bits (1-8):", "zh-CN": "位深度 (1-8):", "zh-TW": "位深度 (1-8):"},
+    "lbl_dither_algo":      {"ja": "ディザ算法:",             "en": "Dither:", "zh-CN": "抖动算法:", "zh-TW": "抖動算法:"},
+    "lbl_dither_int":       {"ja": "ディザ強度:",             "en": "Dither Int.:", "zh-CN": "抖动强度:", "zh-TW": "抖動強度:"},
+    "lbl_contrast":         {"ja": "コントラスト:",           "en": "Contrast:", "zh-CN": "对比度:", "zh-TW": "對比度:"},
+    "lbl_clahe":            {"ja": "CLAHE:",                  "en": "CLAHE:", "zh-CN": "局部对比度增强:", "zh-TW": "局部對比度增強:"},
+    "lbl_prefix":           {"ja": "接頭語:",                 "en": "Prefix:", "zh-CN": "前缀:", "zh-TW": "前綴:"},
+    "lbl_title":            {"ja": "タイトル:",               "en": "Title:", "zh-CN": "标题:", "zh-TW": "標題:"},
+    "lbl_author":           {"ja": "著者名:",                 "en": "Author:", "zh-CN": "作者:", "zh-TW": "作者:"},
+    "lbl_img_type":         {"ja": "画像形式:",               "en": "Img Type:", "zh-CN": "图像类型:", "zh-TW": "圖像類型:"},
+    "lbl_direction":        {"ja": "綴じ方向:",               "en": "Direction:", "zh-CN": "装订方向:", "zh-TW": "裝訂方向:"},
+    "lbl_clean_type":       {"ja": "クリーンアップ種類:",     "en": "Cleanup:", "zh-CN": "清理类型:", "zh-TW": "清理類型:"},
+    "lbl_bg_clean":         {"ja": "背景クリーンアップ:",     "en": "BG Cleanup:", "zh-CN": "背景清理:", "zh-TW": "背景清理:"},
+    "lbl_zoom":             {"ja": "ズーム:",                 "en": "Zoom:", "zh-CN": "缩放:", "zh-TW": "縮放:"},
     # ボタン
-    "btn_start":            {"ja": "一括処理を開始",          "en": "Start Batch"},
-    "btn_sort_num":         {"ja": "数字昇順",                "en": "Num Sort"},
-    "btn_sort_name":        {"ja": "名前順",                  "en": "Name Sort"},
-    "btn_clear":            {"ja": "全消去",                  "en": "Clear All"},
-    "btn_preprocess":       {"ja": "前処理",                  "en": "Preprocess"},
-    "btn_output":           {"ja": "出力",                    "en": "Output"},
-    "btn_top_half":         {"ja": "上半分",                  "en": "Top Half"},
-    "btn_bot_half":         {"ja": "下半分",                  "en": "Bot Half"},
-    "btn_left_half":        {"ja": "左半分",                  "en": "Left Half"},
-    "btn_right_half":       {"ja": "右半分",                  "en": "Right Half"},
+    "btn_start":            {"ja": "一括処理を開始",          "en": "Start Batch", "zh-CN": "开始批量处理", "zh-TW": "開始批次處理"},
+    "btn_sort_num":         {"ja": "数字昇順",                "en": "Num Sort", "zh-CN": "数字排序", "zh-TW": "數字排序"},
+    "btn_sort_name":        {"ja": "名前順",                  "en": "Name Sort", "zh-CN": "名称排序", "zh-TW": "名稱排序"},
+    "btn_clear":            {"ja": "全消去",                  "en": "Clear All", "zh-CN": "全部清除", "zh-TW": "全部清除"},
+    "btn_preprocess":       {"ja": "前処理",                  "en": "Preprocess", "zh-CN": "预处理", "zh-TW": "預處理"},
+    "btn_output":           {"ja": "出力",                    "en": "Output", "zh-CN": "输出", "zh-TW": "輸出"},
+    "btn_top_half":         {"ja": "上半分",                  "en": "Top Half", "zh-CN": "上半部分", "zh-TW": "上半部分"},
+    "btn_bot_half":         {"ja": "下半分",                  "en": "Bot Half", "zh-CN": "下半部分", "zh-TW": "下半部分"},
+    "btn_left_half":        {"ja": "左半分",                  "en": "Left Half", "zh-CN": "左半部分", "zh-TW": "左半部分"},
+    "btn_right_half":       {"ja": "右半分",                  "en": "Right Half", "zh-CN": "右半部分", "zh-TW": "右半部分"},
     # コンボボックスアイテム
-    "combo_center":         {"ja": "中央寄せ",                "en": "Center"},
-    "combo_top":            {"ja": "上寄せ",                  "en": "Top"},
-    "combo_individual":     {"ja": "個別画像 (JPEG/PNG)",     "en": "Images (JPEG/PNG)"},
-    "combo_folder":         {"ja": "フォルダに出力",          "en": "Output to Folder"},
-    "combo_dir_ltr":        {"ja": "左開き (L→R)",            "en": "Left (L→R)"},
-    "combo_dir_rtl":        {"ja": "右開き (R→L)",            "en": "Right (R→L)"},
-    "combo_dir_ttb":        {"ja": "縦送り (Top→Bottom)",     "en": "Vertical (T→B)"},
+    "combo_center":         {"ja": "中央寄せ",                "en": "Center", "zh-CN": "居中", "zh-TW": "居中"},
+    "combo_top":            {"ja": "上寄せ",                  "en": "Top", "zh-CN": "靠上", "zh-TW": "靠上"},
+    "combo_individual":     {"ja": "個別画像 (JPEG/PNG)",     "en": "Images (JPEG/PNG)", "zh-CN": "单独图像 (JPEG/PNG)", "zh-TW": "單獨圖像 (JPEG/PNG)"},
+    "combo_folder":         {"ja": "フォルダに出力",          "en": "Output to Folder", "zh-CN": "输出到文件夹", "zh-TW": "輸出到資料夾"},
+    "combo_dir_ltr":        {"ja": "左開き (L→R)",            "en": "Left (L→R)", "zh-CN": "左开 (L→R)", "zh-TW": "左開 (L→R)"},
+    "combo_dir_rtl":        {"ja": "右開き (R→L)",            "en": "Right (R→L)", "zh-CN": "右开 (R→L)", "zh-TW": "右開 (R→L)"},
+    "combo_dir_ttb":        {"ja": "縦送り (Top→Bottom)",     "en": "Vertical (T→B)", "zh-CN": "竖排 (上→下)", "zh-TW": "豎排 (上→下)"},
     # プレースホルダ・ツールチップ
     "ph_drop":              {"ja": "フォルダ/ZIP/画像をドロップ...",
-                             "en": "Drop folder/ZIP/images..."},
+                             "en": "Drop folder/ZIP/images...", "zh-CN": "拖拽文件夹/ZIP/图像...", "zh-TW": "拖曳資料夾/ZIP/圖像..."},
     "tip_open":             {"ja": "フォルダ / ZIP / 画像ファイルを選択",
-                             "en": "Select folder / ZIP / images"},
-    "lbl_select_image":     {"ja": "画像を選択してください",  "en": "Select an image"},
-    "lbl_updating":         {"ja": "⟳\n更新中...",            "en": "⟳\nUpdating..."},
-    "lbl_updating_short":   {"ja": "⟳ 更新中...",             "en": "⟳ Updating..."},
+                             "en": "Select folder / ZIP / images", "zh-CN": "选择文件夹/ZIP/图像文件", "zh-TW": "選擇資料夾/ZIP/圖像檔案"},
+    "lbl_select_image":     {"ja": "画像を選択してください",  "en": "Select an image", "zh-CN": "请选择图像", "zh-TW": "請選擇圖像"},
+    "lbl_updating":         {"ja": "⟳\n更新中...",            "en": "⟳\nUpdating...", "zh-CN": "⟳\n更新中...", "zh-TW": "⟳\n更新中..."},
+    "lbl_updating_short":   {"ja": "⟳ 更新中...",             "en": "⟳ Updating...", "zh-CN": "⟳ 更新中...", "zh-TW": "⟳ 更新中..."},
     # ダイアログ・メッセージ
     "dlg_select_input":     {"ja": "フォルダ / ZIP / 画像ファイルを選択",
-                             "en": "Select folder / ZIP / images"},
+                             "en": "Select folder / ZIP / images", "zh-CN": "选择文件夹/ZIP/图像文件", "zh-TW": "選擇資料夾/ZIP/圖像檔案"},
     "dlg_filter_images":    {"ja": "画像・ZIPファイル (*.jpg *.jpeg *.png *.bmp *.webp *.zip)",
-                             "en": "Image/ZIP files (*.jpg *.jpeg *.png *.bmp *.webp *.zip)"},
-    "dlg_filter_all":       {"ja": "すべてのファイル (*)",    "en": "All files (*)"},
-    "dlg_select_output":    {"ja": "保存先フォルダを選択",    "en": "Select output folder"},
-    "dlg_error":            {"ja": "エラー",                  "en": "Error"},
-    "dlg_done":             {"ja": "完了",                    "en": "Done"},
+                             "en": "Image/ZIP files (*.jpg *.jpeg *.png *.bmp *.webp *.zip)", "zh-CN": "图像/ZIP文件 (*.jpg *.jpeg *.png *.bmp *.webp *.zip)", "zh-TW": "圖像/ZIP檔案 (*.jpg *.jpeg *.png *.bmp *.webp *.zip)"},
+    "dlg_filter_all":       {"ja": "すべてのファイル (*)",    "en": "All files (*)", "zh-CN": "所有文件 (*)", "zh-TW": "所有檔案 (*)"},
+    "dlg_select_output":    {"ja": "保存先フォルダを選択",    "en": "Select output folder", "zh-CN": "选择输出文件夹", "zh-TW": "選擇輸出資料夾"},
+    "dlg_error":            {"ja": "エラー",                  "en": "Error", "zh-CN": "错误", "zh-TW": "錯誤"},
+    "dlg_done":             {"ja": "完了",                    "en": "Done", "zh-CN": "完成", "zh-TW": "完成"},
     "msg_no_images":        {"ja": "処理対象の画像がありません。",
-                             "en": "No images to process."},
+                             "en": "No images to process.", "zh-CN": "没有要处理的图像。", "zh-TW": "沒有要處理的圖像。"},
     "msg_zip_fail":         {"ja": "ZIPの解凍に失敗しました: {e}",
-                             "en": "Failed to extract ZIP: {e}"},
-    "msg_preview_fail":     {"ja": "プレビュー不可: {e}",     "en": "Preview failed: {e}"},
+                             "en": "Failed to extract ZIP: {e}", "zh-CN": "解压ZIP失败: {e}", "zh-TW": "解壓ZIP失敗: {e}"},
+    "msg_preview_fail":     {"ja": "プレビュー不可: {e}",     "en": "Preview failed: {e}", "zh-CN": "预览失败: {e}", "zh-TW": "預覽失敗: {e}"},
     "msg_done":             {"ja": "{n} 件のアイテムを処理しました。",
-                             "en": "{n} items processed."},
+                             "en": "{n} items processed.", "zh-CN": "已处理 {n} 个项目。", "zh-TW": "已處理 {n} 個項目。"},
     "msg_errors":           {"ja": "\n\nエラー ({n} 件):\n",
-                             "en": "\n\nErrors ({n}):\n"},
+                             "en": "\n\nErrors ({n}):\n", "zh-CN": "\n\n错误 ({n} 条):\n", "zh-TW": "\n\n錯誤 ({n} 條):\n"},
     "msg_sources":          {"ja": "{n} 個のソースを読み込み済み",
-                             "en": "{n} sources loaded"},
+                             "en": "{n} sources loaded", "zh-CN": "已加载 {n} 个来源", "zh-TW": "已載入 {n} 個來源"},
     "msg_load_fail":        {"ja": "画像の読み込みに失敗しました: {e}",
-                             "en": "Failed to load images: {e}"},
+                             "en": "Failed to load images: {e}", "zh-CN": "加载图像失败: {e}", "zh-TW": "載入圖像失敗: {e}"},
 }
 
 def _tr(key: str, lang: str = "ja", **kwargs) -> str:
@@ -584,7 +584,7 @@ class ImageEditorApp(QMainWindow):
         self._split_preview_half: str = "first"  # 分割プレビュー対象 ("first"=上/左, "second"=下/右)
         self._trim_detect_thread = None
         self._preview_mode: str = "output"  # "preprocess" | "output"
-        self._lang: str = "ja"  # 現在の言語 ("ja" | "en")
+        self._lang: str = "ja"  # 現在の言語 ("ja", "en", "zh-CN", "zh-TW")
 
         # プレビュー更新デバウンスタイマー (300ms)
         self._preview_timer = QTimer(self)
@@ -649,8 +649,8 @@ class ImageEditorApp(QMainWindow):
         title_row.addWidget(self._title_label)
         title_row.addStretch()
         self._lang_combo = QComboBox()
-        self._lang_combo.addItems(["Japanese", "English"])
-        self._lang_combo.setFixedWidth(90)
+        self._lang_combo.addItems(["Japanese", "English", "简体中文", "繁體中文"])
+        self._lang_combo.setFixedWidth(120)
         self._lang_combo.currentIndexChanged.connect(self._on_language_changed)
         title_row.addWidget(self._lang_combo)
         settings_layout.addLayout(title_row)
@@ -1167,7 +1167,15 @@ class ImageEditorApp(QMainWindow):
     # --- 言語切替 ---
 
     def _on_language_changed(self, index: int):
-        self._lang = "en" if index == 1 else "ja"
+        # インデックス: 0=Japanese, 1=English, 2=简体中文, 3=繁體中文
+        if index == 0:
+            self._lang = "ja"
+        elif index == 1:
+            self._lang = "en"
+        elif index == 2:
+            self._lang = "zh-CN"
+        else:
+            self._lang = "zh-TW"
         self._apply_language()
 
     def _apply_language(self):
@@ -1562,10 +1570,12 @@ class ImageEditorApp(QMainWindow):
         self._set_preview_mode(       s.value("preview_mode",     "output", type=str))
         # 言語設定の復元
         saved_lang = s.value("language", "ja", type=str)
-        if saved_lang in ("ja", "en"):
+        if saved_lang in ("ja", "en", "zh-CN", "zh-TW"):
             self._lang = saved_lang
+            # コンボボックスインデックス設定
+            lang_map = {"ja": 0, "en": 1, "zh-CN": 2, "zh-TW": 3}
             self._lang_combo.blockSignals(True)
-            self._lang_combo.setCurrentIndex(1 if saved_lang == "en" else 0)
+            self._lang_combo.setCurrentIndex(lang_map.get(saved_lang, 0))
             self._lang_combo.blockSignals(False)
             self._apply_language()
 
