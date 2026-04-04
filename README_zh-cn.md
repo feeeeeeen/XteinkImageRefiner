@@ -83,7 +83,7 @@ Xteink 设备使用的 XTG / XTH / XTC / XTCH 格式规格请参考以下文档�
 - 首次发布
 
 ## 备注
-本项目使用 [Claude Code](https://claude.ai/code)（Anthropic）辅助生成和开发。
+本项目使用 [Claude Code](https://claude.ai/code)（Anthropic）、[DeepSeek](https://deepseek.com)辅助生成和开发。
 
-许可证
+## 许可证
 [MIT License](LICENSE)
