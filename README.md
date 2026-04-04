@@ -17,6 +17,7 @@ A desktop application for optimizing and converting manga and scanned images for
 - **Auto margin detection & manual adjustment**: Drag crop handles to fine-tune
 - **Auto split**: Automatically split spread pages into two based on aspect ratio
 - **Dithering**: Floyd-Steinberg / Atkinson / Sauvola algorithms (1-bit / 2-bit / 8-bit)
+- **Device presets**: Built-in resolution presets for Xteink X3 (528x792) and X4 (480x800)
 - **No-resize mode**: For sorting, renaming, and packing images without resizing
 - **Auto metadata extraction**: Parses `[Author] Title` from folder/ZIP names
 - **Japanese / English UI**: Switch language from the settings panel
@@ -67,6 +68,24 @@ For details on the XTG / XTH / XTC / XTCH formats used by Xteink devices:
 
 - [XTC-XTG-XTH-XTCH.md](XTC-XTG-XTH-XTCH.md) (English)
 - [XTC-XTG-XTH-XTCH_jp.md](XTC-XTG-XTH-XTCH_jp.md) (Japanese)
+
+## Changelog
+
+### 2026-04-04
+
+- Added device preset selector (Xteink X3 528x792 / X4 480x800) replacing the X4-only checkbox
+- Fixed ZIP slip vulnerability with path traversal validation on extraction
+- Improved TrimDetectThread shutdown reliability with terminate fallback
+- Optimized XTH save performance by replacing Python loops with NumPy vectorized operations
+
+### 2026-03-08
+
+- Added Japanese / English UI language switching
+- Improved author name auto-fill (leave blank instead of "Unknown" when not detected)
+
+### 2026-03-01
+
+- Initial release
 
 ## Note
 

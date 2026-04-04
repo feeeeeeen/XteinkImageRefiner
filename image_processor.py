@@ -550,44 +550,38 @@ def save_xth(img: Image.Image, output_path: str, clean_intensity: int = 0, clean
         
     w, h = img_l.size
     
-    # 階調マッピング
+    # 階調マッピング (NumPyベクトル化)
     # Xteink LUT Level: 0=White, 1=Dark Grey, 2=Light Grey, 3=Black
-    def map_pixel(p):
-        if p > 191: return 0 # White
-        if p > 127: return 2 # Light Grey
-        if p > 63:  return 1 # Dark Grey
-        return 3             # Black
-    
+    arr = np.array(img_l, dtype=np.uint8)  # shape: (h, w)
+    mapped = np.full_like(arr, 3, dtype=np.uint8)  # default: Black (<=63)
+    mapped[arr > 191] = 0  # White
+    mapped[(arr > 127) & (arr <= 191)] = 2  # Light Grey
+    mapped[(arr > 63) & (arr <= 127)] = 1  # Dark Grey
+
     # XTHは Bit1 (MSB) と Bit2 (LSB) の2プレーン構成
     # pixelValue = (bit1 << 1) | bit2
-    
-    pixels = list(img_l.getdata())
-    bit1_data = [] # Bit1 planes
-    bit2_data = [] # Bit2 planes
-    
-    # 垂直スキャン (右から左、上から下)
-    # Columns: width-1 down to 0
-    # Rows: Groups of 8 vertical pixels
-    
-    for x in range(w-1, -1, -1):
-        for y_start in range(0, h, 8):
-            b1 = 0
-            b2 = 0
-            for i in range(8):
-                y = y_start + i
-                if y < h:
-                    val = map_pixel(pixels[y * w + x])
-                    bit1 = (val >> 1) & 1
-                    bit2 = val & 1
-                    # MSB (bit 7) = topmost pixel
-                    if bit1: b1 |= (1 << (7 - i))
-                    if bit2: b2 |= (1 << (7 - i))
-            bit1_data.append(b1)
-            bit2_data.append(b2)
-            
-    plane1 = bytes(bit1_data)
-    plane2 = bytes(bit2_data)
-    full_data = plane1 + plane2
+
+    # 高さを8の倍数にパディング（不足分は0=White）
+    pad_h = (8 - h % 8) % 8
+    if pad_h:
+        mapped = np.pad(mapped, ((0, pad_h), (0, 0)), constant_values=0)
+
+    # 垂直スキャン (右から左、上から下、8ピクセル単位でビットパッキング)
+    # 列を反転: 右→左
+    mapped = mapped[:, ::-1]
+    # (h_padded, w) → (w, groups, 8) に変形
+    h_padded = mapped.shape[0]
+    mapped = mapped.T.reshape(w, h_padded // 8, 8)
+
+    bit1_arr = (mapped >> 1) & 1  # MSBプレーン
+    bit2_arr = mapped & 1         # LSBプレーン
+
+    # 8ビットを1バイトにパッキング (MSB = bit7 = topmost pixel)
+    weights = np.array([128, 64, 32, 16, 8, 4, 2, 1], dtype=np.uint8)
+    plane1 = (bit1_arr * weights).sum(axis=2).astype(np.uint8)
+    plane2 = (bit2_arr * weights).sum(axis=2).astype(np.uint8)
+
+    full_data = plane1.tobytes() + plane2.tobytes()
     
     data_size = len(full_data)
     # MD5はオプションだが、一応計算

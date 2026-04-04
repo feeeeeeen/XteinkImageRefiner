@@ -50,6 +50,8 @@ _TRANSLATIONS = {
     "chk_auto_rotate":      {"ja": "自動回転",                "en": "Auto Rotate"},
     "chk_auto_trim":        {"ja": "余白自動トリミング",      "en": "Auto Trim"},
     "chk_no_resize":        {"ja": "リサイズなし",            "en": "No Resize"},
+    "lbl_preset":           {"ja": "プリセット:",             "en": "Preset:"},
+    "combo_preset_none":    {"ja": "なし",                    "en": "None"},
     "chk_enable":           {"ja": "有効にする",              "en": "Enable"},
     "chk_jpeg":             {"ja": "JPEG変換 (.jpg)",         "en": "JPEG Conv. (.jpg)"},
     # ラベル
@@ -724,9 +726,18 @@ class ImageEditorApp(QMainWindow):
         self.no_resize_check.toggled.connect(self.on_no_resize_changed)
         resize_grid.addWidget(self.no_resize_check)
 
-        self.x4_check = QCheckBox("Xteink X4 (480×800)")
-        self.x4_check.toggled.connect(self.on_x4_changed)
-        resize_grid.addWidget(self.x4_check)
+        preset_layout = QHBoxLayout()
+        self._preset_label = QLabel(_tr("lbl_preset", self._lang))
+        preset_layout.addWidget(self._preset_label)
+        self.preset_combo = QComboBox()
+        self.preset_combo.addItems([
+            _tr("combo_preset_none", self._lang),
+            "Xteink X3 (528×792)",
+            "Xteink X4 (480×800)",
+        ])
+        self.preset_combo.currentIndexChanged.connect(self.on_preset_changed)
+        preset_layout.addWidget(self.preset_combo)
+        resize_grid.addLayout(preset_layout)
 
         w_layout = QHBoxLayout()
         self.width_label = QLabel(_tr("lbl_max_w", self._lang))
@@ -1188,6 +1199,7 @@ class ImageEditorApp(QMainWindow):
         self.jpeg_check.setText(_tr("chk_jpeg", lang))
 
         # ラベル
+        self._preset_label.setText(_tr("lbl_preset", lang))
         self._blur_label.setText(_tr("lbl_blur", lang))
         self.width_label.setText(_tr("lbl_max_w", lang))
         self.height_label.setText(_tr("lbl_max_h", lang))
@@ -1226,6 +1238,7 @@ class ImageEditorApp(QMainWindow):
             combo.setCurrentIndex(idx)
             combo.blockSignals(False)
 
+        _update_combo(self.preset_combo, [_tr("combo_preset_none", lang), "Xteink X3 (528×792)", "Xteink X4 (480×800)"])
         _update_combo(self.alignment_combo, [_tr("combo_center", lang), _tr("combo_top", lang)])
         _update_combo(self.output_format_combo, [_tr("combo_individual", lang), "EPUB3", "XTC / XTCH"])
         _update_combo(self.compress_combo, [_tr("combo_folder", lang), "ZIP (.zip)", "CBZ (.cbz)"])
@@ -1312,7 +1325,8 @@ class ImageEditorApp(QMainWindow):
     def _stop_trim_detection(self):
         if self._trim_detect_thread is not None:
             self._trim_detect_thread.abort()
-            self._trim_detect_thread.wait(3000)
+            if not self._trim_detect_thread.wait(3000):
+                self._trim_detect_thread.terminate()
             self._trim_detect_thread.deleteLater()
             self._trim_detect_thread = None
 
@@ -1433,10 +1447,12 @@ class ImageEditorApp(QMainWindow):
 
     def on_no_resize_changed(self, checked):
         no_resize = checked
+        preset_active = self.preset_combo.currentIndex() != 0
         # リサイズなし時は関連設定を無効化
-        self.x4_check.setEnabled(not no_resize)
-        self.width_spin.setEnabled(not no_resize and not self.x4_check.isChecked())
-        self.height_spin.setEnabled(not no_resize and not self.x4_check.isChecked())
+        self._preset_label.setEnabled(not no_resize)
+        self.preset_combo.setEnabled(not no_resize)
+        self.width_spin.setEnabled(not no_resize and not preset_active)
+        self.height_spin.setEnabled(not no_resize and not preset_active)
         self.width_label.setEnabled(not no_resize)
         self.height_label.setEnabled(not no_resize)
         self.alignment_label.setEnabled(not no_resize)
@@ -1449,15 +1465,18 @@ class ImageEditorApp(QMainWindow):
         self.zoom_slider.setValue(100)
         self.refresh_preview()
 
-    def on_x4_changed(self, checked):
+    def on_preset_changed(self, index):
         no_resize = self.no_resize_check.isChecked()
-        self.width_spin.setEnabled(not checked and not no_resize)
-        self.height_spin.setEnabled(not checked and not no_resize)
+        preset_active = index != 0
+        self.width_spin.setEnabled(not preset_active and not no_resize)
+        self.height_spin.setEnabled(not preset_active and not no_resize)
         self.width_label.setEnabled(not no_resize)
         self.height_label.setEnabled(not no_resize)
-        if checked:
-            self.width_spin.setValue(480)
-            self.height_spin.setValue(800)
+        _PRESET_SIZES = {1: (528, 792), 2: (480, 800)}
+        if index in _PRESET_SIZES:
+            w, h = _PRESET_SIZES[index]
+            self.width_spin.setValue(w)
+            self.height_spin.setValue(h)
         self.refresh_preview()
 
     def load_stylesheet(self):
@@ -1483,7 +1502,7 @@ class ImageEditorApp(QMainWindow):
         s.setValue("no_resize",         self.no_resize_check.isChecked())
         s.setValue("width",            self.width_spin.value())
         s.setValue("height",           self.height_spin.value())
-        s.setValue("x4_preset",        self.x4_check.isChecked())
+        s.setValue("preset_index",     self.preset_combo.currentIndex())
         s.setValue("alignment",        self.alignment_combo.currentIndex())
         s.setValue("sharpen",          self.sharpen_slider.value())
         s.setValue("split",            self.split_check.isChecked())
@@ -1510,11 +1529,15 @@ class ImageEditorApp(QMainWindow):
 
     def load_settings(self):
         s = QSettings("antigravity", "XteinkImageRefiner")
-        # no_resize → 幅・高さ → X4 の順で読む（依存関係のため）
+        # no_resize → 幅・高さ → プリセット の順で読む（依存関係のため）
         self.no_resize_check.setChecked(   s.value("no_resize",        False, type=bool))
         self.width_spin.setValue(          s.value("width",            1920, type=int))
         self.height_spin.setValue(         s.value("height",           1080, type=int))
-        self.x4_check.setChecked(          s.value("x4_preset",        False, type=bool))
+        # 旧設定 (x4_preset=True) からの移行: preset_index が未設定なら x4_preset を参照
+        preset_idx = s.value("preset_index", -1, type=int)
+        if preset_idx < 0:
+            preset_idx = 2 if s.value("x4_preset", False, type=bool) else 0
+        self.preset_combo.setCurrentIndex(preset_idx)
         self.alignment_combo.setCurrentIndex(s.value("alignment",       0,    type=int))
         self.sharpen_slider.setValue(      s.value("sharpen",          0,    type=int))
         self.split_check.setChecked(       s.value("split",            False, type=bool))
@@ -1641,6 +1664,12 @@ class ImageEditorApp(QMainWindow):
 
             temp_dir = tempfile.mkdtemp(prefix="img_editor_")
             with zipfile.ZipFile(path, 'r') as zip_ref:
+                # ZIPスリップ対策: パストラバーサルを検出して拒否
+                real_temp = os.path.realpath(temp_dir)
+                for info in zip_ref.infolist():
+                    target = os.path.realpath(os.path.join(temp_dir, info.filename))
+                    if not target.startswith(real_temp + os.sep) and target != real_temp:
+                        raise ValueError(f"不正なパスを含むZIP: {info.filename}")
                 zip_ref.extractall(temp_dir)
             self._temp_dirs.append(temp_dir)
             self._add_images_from_folder(temp_dir, name)
@@ -1698,7 +1727,7 @@ class ImageEditorApp(QMainWindow):
                 self.image_list_widget.addItem(item)
 
             # リストが空だった場合のみ、1枚目の解像度を初期値にセット
-            if was_empty and files and not self.x4_check.isChecked():
+            if was_empty and files and self.preset_combo.currentIndex() == 0:
                 first_path = files[0][0]
                 with Image.open(first_path) as img:
                     w, h = img.size
@@ -1738,7 +1767,7 @@ class ImageEditorApp(QMainWindow):
             return
 
         # リストが空だった場合のみ、1枚目の解像度を初期値にセット
-        if was_empty and not self.x4_check.isChecked():
+        if was_empty and self.preset_combo.currentIndex() == 0:
             try:
                 with Image.open(added[0]) as img:
                     w, h = img.size
@@ -1798,7 +1827,7 @@ class ImageEditorApp(QMainWindow):
             self.current_preview_image = None
 
     def refresh_preview(self):
-        if not self.current_preview_image or self._preview_running:
+        if self.current_preview_image is None or self._preview_running:
             return
         self._preview_running = True
 
