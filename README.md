@@ -5,6 +5,7 @@
 </p>
 
 **[日本語版 README はこちら](README_jp.md)**
+**[点击这里查看简体中文版README版本](README_zh-cn.md)**
 
 A desktop application for optimizing and converting manga and scanned images for e-book readers, especially Xteink e-paper devices.
 
