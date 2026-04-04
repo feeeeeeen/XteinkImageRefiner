@@ -43,50 +43,47 @@
 ```bash
 pip install PySide6 Pillow opencv-python numpy
 python main.py
+```
 
-基本流程
-加载图像 — 点击“打开文件夹”或拖拽到图像列表，也可直接加载 ZIP 文件
+输出位置：`dist/XteinkImageRefiner.exe`
 
-调整设置 — 在实时预览中调整缩放、灰度、抖动、清洁等参数
+## 基本流程
+1. **加载图像** — 点击“打开文件夹”或拖拽到图像列表，也可直接加载 ZIP 文件
+2. **调整设置** — 在实时预览中调整缩放、灰度、抖动、清洁等参数
+3. **输出** — 选择保存格式（单张图像 / EPUB3 / XTC），点击“开始转换”批量输出
 
-输出 — 选择保存格式（单张图像 / EPUB3 / XTC），点击“开始转换”批量输出
-
-构建
+##构建
 可使用 PyInstaller 构建独立的 exe 文件：
 
-bash
+```bash
 pip install pyinstaller
 python -m PyInstaller XteinkImageRefiner.spec
+```
 输出位置：dist/XteinkImageRefiner.exe
 
-专有格式规格
+## 专有格式规格
 Xteink 设备使用的 XTG / XTH / XTC / XTCH 格式规格请参考以下文档：
+- [XTC-XTG-XTH-XTCH.md](XTC-XTG-XTH-XTCH.md)（English）
+- [XTC-XTG-XTH-XTCH_jp.md](XTC-XTG-XTH-XTCH_jp.md)（日本語）
+- [XTC-XTG-XTH-XTCH_zh-cn.md](XTC-XTG-XTH-XTCH_zh-cn.md)（简体中文）
 
-XTC-XTG-XTH-XTCH.md（英文）
+## 更新日志
+### 2026-04-04
+- 增加设备预设选择（Xteink X3 528x792 / X4 480x800），替换旧的 X4 复选框
+- 修复 ZIP 解压时的路径遍历漏洞
+- 提高白边检测线程的停止可靠性
+- 使用 NumPy 向量化运算优化 XTH 保存速度
+- 增加了简体中文，繁体中文翻译
 
-XTC-XTG-XTH-XTCH_jp.md（日文）
+### 2026-03-08
+- 增加日语 / 英语 UI 语言切换功能
+- 改进作者名自动填充（未检测到时留空，不再设为“未知”）
 
-更新日志
-2026-04-04
-增加设备预设选择（Xteink X3 528x792 / X4 480x800），替换旧的 X4 复选框
-增加了简体中文，繁体中文翻译
+### 2026-03-01
+- 首次发布
 
-修复 ZIP 解压时的路径遍历漏洞
-
-提高白边检测线程的停止可靠性
-
-使用 NumPy 向量化运算优化 XTH 保存速度
-
-2026-03-08
-增加日语 / 英语 UI 语言切换功能
-
-改进作者名自动填充（未检测到时留空，不再设为“未知”）
-
-2026-03-01
-首次发布
-
-备注
-本项目使用 Claude Code（Anthropic）辅助生成和开发。
+## 备注
+本项目使用 [Claude Code](https://claude.ai/code)（Anthropic）辅助生成和开发。
 
 许可证
-MIT License
+[MIT License](LICENSE)
