@@ -54,6 +54,8 @@ _TRANSLATIONS = {
     "combo_preset_none":    {"ja": "なし",                    "en": "None"},
     "chk_enable":           {"ja": "有効にする",              "en": "Enable"},
     "chk_jpeg":             {"ja": "JPEG変換 (.jpg)",         "en": "JPEG Conv. (.jpg)"},
+    "chk_per_folder":       {"ja": "フォルダごとに保存",      "en": "Save per Folder"},
+    "chk_edit_name":        {"ja": "編集する",                "en": "Edit"},
     # ラベル
     "lbl_blur":             {"ja": "ぼかし強度:",             "en": "Blur:"},
     "lbl_max_w":            {"ja": "最大幅:",                 "en": "Max W:"},
@@ -131,12 +133,21 @@ def _tr(key: str, lang: str = "ja", **kwargs) -> str:
         text = text.format(**kwargs)
     return text
 
+def _sanitize_filename(name: str) -> str:
+    """Windowsファイル名予約文字を '_' に置換し、末尾のドット/空白を除去する。
+    空文字や全削除された場合は 'untitled' を返す。"""
+    if not name:
+        return "untitled"
+    sanitized = re.sub(r'[<>:"/\\|?*\x00-\x1f]', '_', name)
+    sanitized = sanitized.rstrip('. ').strip()
+    return sanitized or "untitled"
+
 class ProcessingThread(QThread):
     progress = Signal(int, int)
     finished = Signal(list)
     log = Signal(str)
 
-    def __init__(self, image_list, output_dir, max_width, max_height, prefix, use_grayscale, bits, use_rename, force_jpeg, epub_settings=None, xtc_settings=None, alignment="center", auto_split=False, blur_strength=0, contrast=0, crop_rects=None, auto_rotate=False, sharpen=0, clahe=0, no_resize=False, output_name="", compress_format=""):
+    def __init__(self, image_list, output_dir, max_width, max_height, prefix, use_grayscale, bits, use_rename, force_jpeg, epub_settings=None, xtc_settings=None, alignment="center", auto_split=False, blur_strength=0, contrast=0, crop_rects=None, auto_rotate=False, sharpen=0, clahe=0, no_resize=False, output_name="", compress_format="", source_labels=None, source_ids=None, per_folder=False, use_source_label=False):
         super().__init__()
         self.image_list = image_list
         self.output_dir = output_dir
@@ -160,31 +171,105 @@ class ProcessingThread(QThread):
         self.no_resize = no_resize
         self.output_name = output_name
         self.compress_format = compress_format
+        self.source_labels = source_labels  # image_list と同じ長さ。per_folder時の表示・出力名用
+        self.source_ids = source_ids        # image_list と同じ長さ。グルーピングの一意識別子
+        self.per_folder = per_folder
+        self.use_source_label = use_source_label  # True の場合、グループラベルを出力名に使用（連番なし）
+
+    def _group_by_source(self):
+        """画像一覧の順序を保ったまま、ソースID単位でグループ化する。
+        異なる場所にある同名フォルダ（同じラベル）も別ソースIDなら別グループとして扱う。
+        戻り値: [(label, [path,...]), ...] (出現順)"""
+        groups = {}  # source_id -> (label, [paths])
+        order = []   # source_id の出現順
+        ids = self.source_ids or []
+        labels = self.source_labels or []
+        for i, path in enumerate(self.image_list):
+            sid = ids[i] if i < len(ids) else None
+            label = labels[i] if i < len(labels) else ""
+            # source_id が無い場合は label をフォールバックキーに使う
+            key = sid if sid is not None else f"_lbl:{label}"
+            if key not in groups:
+                groups[key] = (label, [])
+                order.append(key)
+            groups[key][1].append(path)
+        return [(groups[k][0], groups[k][1]) for k in order]
 
     def run(self):
         try:
-            results = batch_process(
-                self.image_list, self.output_dir,
-                self.max_width, self.max_height,
-                self.prefix, self.use_grayscale, self.bits,
-                use_rename=self.use_rename,
-                force_jpeg=self.force_jpeg,
-                epub_settings=self.epub_settings,
-                xtc_settings=self.xtc_settings,
-                alignment=self.alignment,
-                progress_callback=self.progress.emit,
-                log_callback=self.log.emit,
-                auto_split=self.auto_split,
-                blur_strength=self.blur_strength,
-                contrast=self.contrast,
-                crop_rects=self.crop_rects,
-                auto_rotate=self.auto_rotate,
-                sharpen=self.sharpen,
-                clahe=self.clahe,
-                no_resize=self.no_resize,
-                output_name=self.output_name,
-                compress_format=self.compress_format
-            )
+            # フォルダごと保存が無効、もしくはソースが1つしかない場合は通常処理
+            groups = self._group_by_source() if (self.per_folder and self.source_labels) else None
+            if not groups or len(groups) <= 1:
+                results = batch_process(
+                    self.image_list, self.output_dir,
+                    self.max_width, self.max_height,
+                    self.prefix, self.use_grayscale, self.bits,
+                    use_rename=self.use_rename,
+                    force_jpeg=self.force_jpeg,
+                    epub_settings=self.epub_settings,
+                    xtc_settings=self.xtc_settings,
+                    alignment=self.alignment,
+                    progress_callback=self.progress.emit,
+                    log_callback=self.log.emit,
+                    auto_split=self.auto_split,
+                    blur_strength=self.blur_strength,
+                    contrast=self.contrast,
+                    crop_rects=self.crop_rects,
+                    auto_rotate=self.auto_rotate,
+                    sharpen=self.sharpen,
+                    clahe=self.clahe,
+                    no_resize=self.no_resize,
+                    output_name=self.output_name,
+                    compress_format=self.compress_format
+                )
+            else:
+                # グループごとに batch_process を呼び出し、進捗を全画像通算で発火する
+                results = []
+                total_imgs = len(self.image_list)
+                processed_offset = [0]  # クロージャから書き換えるためリストでラップ
+
+                def make_progress_cb():
+                    base = processed_offset[0]
+                    def cb(current, _total_in_group):
+                        self.progress.emit(base + current, total_imgs)
+                    return cb
+
+                pad = max(3, len(str(len(groups))))
+                for idx, (label, paths) in enumerate(groups, start=1):
+                    if self.use_source_label:
+                        # 編集無効時は各グループのソースラベルをそのまま使用（連番なし）
+                        if not label:
+                            self.log.emit(f"警告: ソースラベルが空のため連番 {idx:0{pad}d} を使用します")
+                        group_output_name = _sanitize_filename(label or f"{idx:0{pad}d}")
+                    else:
+                        suffix = f"_{idx:0{pad}d}"
+                        group_output_name = (self.output_name + suffix) if self.output_name else suffix.lstrip("_")
+                    grp_results = batch_process(
+                        paths, self.output_dir,
+                        self.max_width, self.max_height,
+                        self.prefix, self.use_grayscale, self.bits,
+                        use_rename=self.use_rename,
+                        force_jpeg=self.force_jpeg,
+                        epub_settings=self.epub_settings,
+                        xtc_settings=self.xtc_settings,
+                        alignment=self.alignment,
+                        progress_callback=make_progress_cb(),
+                        log_callback=self.log.emit,
+                        auto_split=self.auto_split,
+                        blur_strength=self.blur_strength,
+                        contrast=self.contrast,
+                        crop_rects=self.crop_rects,
+                        auto_rotate=self.auto_rotate,
+                        sharpen=self.sharpen,
+                        clahe=self.clahe,
+                        no_resize=self.no_resize,
+                        output_name=group_output_name,
+                        compress_format=self.compress_format
+                    )
+                    results.extend(grp_results)
+                    processed_offset[0] += len(paths)
+                # 最終進捗を確実に100%に
+                self.progress.emit(total_imgs, total_imgs)
         except Exception as e:
             self.log.emit(f"致命的なエラーが発生しました: {e}")
             results = []
@@ -274,7 +359,8 @@ class DraggableListWidget(QListWidget):
         items_info = []
         for r in selected_rows:
             it = self.item(r)
-            items_info.append((it.text(), it.data(Qt.UserRole), it.data(Qt.UserRole + 1), it.data(Qt.UserRole + 2)))
+            items_info.append((it.text(), it.data(Qt.UserRole), it.data(Qt.UserRole + 1),
+                               it.data(Qt.UserRole + 2), it.data(Qt.UserRole + 3)))
 
         # 移動先の補正（上側にある選択アイテムを取り除くと行番号がずれるため）
         shift = sum(1 for r in selected_rows if r < target_row)
@@ -287,11 +373,12 @@ class DraggableListWidget(QListWidget):
             for row in reversed(selected_rows):
                 self.takeItem(row)
 
-            for i, (text, data, src_label, rel_disp) in enumerate(items_info):
+            for i, (text, data, src_label, rel_disp, src_id) in enumerate(items_info):
                 item = QListWidgetItem(text)
                 item.setData(Qt.UserRole, data)
                 item.setData(Qt.UserRole + 1, src_label)
                 item.setData(Qt.UserRole + 2, rel_disp)
+                item.setData(Qt.UserRole + 3, src_id)
                 self.insertItem(insert_at + i, item)
 
             self.clearSelection()
@@ -585,6 +672,7 @@ class ImageEditorApp(QMainWindow):
         self._trim_detect_thread = None
         self._preview_mode: str = "output"  # "preprocess" | "output"
         self._lang: str = "ja"  # 現在の言語 ("ja" | "en")
+        self._next_source_id: int = 0  # 各ソース読み込みに割り当てる一意なID
 
         # プレビュー更新デバウンスタイマー (300ms)
         self._preview_timer = QTimer(self)
@@ -734,6 +822,7 @@ class ImageEditorApp(QMainWindow):
             _tr("combo_preset_none", self._lang),
             "Xteink X3 (528×792)",
             "Xteink X4 (480×800)",
+            "M5Paper S3 (540×960)",
         ])
         self.preset_combo.currentIndexChanged.connect(self.on_preset_changed)
         preset_layout.addWidget(self.preset_combo)
@@ -927,6 +1016,11 @@ class ImageEditorApp(QMainWindow):
         output_name_vbox.setContentsMargins(4, 1, 4, 2)
         output_name_vbox.setSpacing(2)
 
+        self.edit_name_check = QCheckBox(_tr("chk_edit_name", self._lang))
+        self.edit_name_check.setChecked(True)
+        self.edit_name_check.toggled.connect(self.on_edit_name_changed)
+        output_name_vbox.addWidget(self.edit_name_check)
+
         t_layout = QHBoxLayout()
         self._title_label2 = QLabel(_tr("lbl_title", self._lang))
         t_layout.addWidget(self._title_label2)
@@ -971,6 +1065,9 @@ class ImageEditorApp(QMainWindow):
         self.compress_combo.addItems([_tr("combo_folder", self._lang), "ZIP (.zip)", "CBZ (.cbz)"])
         self.compress_combo.currentIndexChanged.connect(self._update_output_name_preview)
         format_vbox.addWidget(self.compress_combo)
+
+        self.per_folder_check = QCheckBox(_tr("chk_per_folder", self._lang))
+        format_vbox.addWidget(self.per_folder_check)
 
         settings_layout.addWidget(self._format_group)
 
@@ -1197,6 +1294,8 @@ class ImageEditorApp(QMainWindow):
         self.gray_check.setText(_tr("chk_enable", lang))
         self.rename_check.setText(_tr("chk_enable", lang))
         self.jpeg_check.setText(_tr("chk_jpeg", lang))
+        self.per_folder_check.setText(_tr("chk_per_folder", lang))
+        self.edit_name_check.setText(_tr("chk_edit_name", lang))
 
         # ラベル
         self._preset_label.setText(_tr("lbl_preset", lang))
@@ -1238,7 +1337,7 @@ class ImageEditorApp(QMainWindow):
             combo.setCurrentIndex(idx)
             combo.blockSignals(False)
 
-        _update_combo(self.preset_combo, [_tr("combo_preset_none", lang), "Xteink X3 (528×792)", "Xteink X4 (480×800)"])
+        _update_combo(self.preset_combo, [_tr("combo_preset_none", lang), "Xteink X3 (528×792)", "Xteink X4 (480×800)", "M5Paper S3 (540×960)"])
         _update_combo(self.alignment_combo, [_tr("combo_center", lang), _tr("combo_top", lang)])
         _update_combo(self.output_format_combo, [_tr("combo_individual", lang), "EPUB3", "XTC / XTCH"])
         _update_combo(self.compress_combo, [_tr("combo_folder", lang), "ZIP (.zip)", "CBZ (.cbz)"])
@@ -1356,16 +1455,19 @@ class ImageEditorApp(QMainWindow):
         for i in range(self.image_list_widget.count()):
             item = self.image_list_widget.item(i)
             items_data.append((item.text(), item.data(Qt.UserRole),
-                               item.data(Qt.UserRole + 1), item.data(Qt.UserRole + 2)))
+                               item.data(Qt.UserRole + 1), item.data(Qt.UserRole + 2),
+                               item.data(Qt.UserRole + 3)))
         if not items_data:
             return
-        items_data.sort(key=lambda x: key_func(x[1] or x[0]))
+        # ソースラベル単位でグルーピングを保つため、(ソースラベル, ファイル名) の複合キーでソート
+        items_data.sort(key=lambda x: (key_func(x[2] or ""), key_func(x[3] or x[0])))
         self.image_list_widget.clear()
-        for text, data, src_label, rel_disp in items_data:
+        for text, data, src_label, rel_disp, src_id in items_data:
             new_item = QListWidgetItem(text)
             new_item.setData(Qt.UserRole, data)
             new_item.setData(Qt.UserRole + 1, src_label)
             new_item.setData(Qt.UserRole + 2, rel_disp)
+            new_item.setData(Qt.UserRole + 3, src_id)
             self.image_list_widget.addItem(new_item)
 
     def sort_natural(self):
@@ -1409,21 +1511,41 @@ class ImageEditorApp(QMainWindow):
         self._update_output_name_preview()
         self.refresh_preview()
 
-    def _update_output_name_preview(self):
-        """タイトル・著者名・出力形式に応じた出力ファイル/フォルダ名をプレビュー表示する"""
-        title = self.epub_title_edit.text().strip()
-        author = self.epub_author_edit.text().strip()
+    def on_edit_name_changed(self, checked):
+        """「編集する」チェックボックスの状態に応じてタイトル・著者欄を有効/無効化"""
+        self.epub_title_edit.setEnabled(checked)
+        self.epub_author_edit.setEnabled(checked)
+        self._title_label2.setEnabled(checked)
+        self._author_label.setEnabled(checked)
+        self._update_output_name_preview()
 
-        if not title and not author:
+    def _first_source_label(self) -> str:
+        """画像一覧の先頭アイテムのソースラベルを返す（空なら "")"""
+        if self.image_list_widget.count() == 0:
+            return ""
+        return self.image_list_widget.item(0).data(Qt.UserRole + 1) or ""
+
+    def _build_output_base(self) -> str:
+        """編集モード/ソースラベルに応じた出力名のベースを返す"""
+        if self.edit_name_check.isChecked():
+            title = self.epub_title_edit.text().strip()
+            author = self.epub_author_edit.text().strip()
+            if author and title:
+                return f"[{author}] {title}"
+            if title:
+                return title
+            if author:
+                return f"[{author}]"
+            return ""
+        # 編集無効時は最初のソースラベルをベースとする
+        return self._first_source_label()
+
+    def _update_output_name_preview(self):
+        """出力ファイル/フォルダ名をプレビュー表示する"""
+        base = self._build_output_base()
+        if not base:
             self.output_name_preview.setText("")
             return
-
-        if author and title:
-            base = f"[{author}] {title}"
-        elif title:
-            base = title
-        else:
-            base = f"[{author}]"
 
         format_idx = self.output_format_combo.currentIndex()
         if format_idx == 0:
@@ -1472,7 +1594,7 @@ class ImageEditorApp(QMainWindow):
         self.height_spin.setEnabled(not preset_active and not no_resize)
         self.width_label.setEnabled(not no_resize)
         self.height_label.setEnabled(not no_resize)
-        _PRESET_SIZES = {1: (528, 792), 2: (480, 800)}
+        _PRESET_SIZES = {1: (528, 792), 2: (480, 800), 3: (540, 960)}
         if index in _PRESET_SIZES:
             w, h = _PRESET_SIZES[index]
             self.width_spin.setValue(w)
@@ -1516,6 +1638,8 @@ class ImageEditorApp(QMainWindow):
         s.setValue("output_format",    self.output_format_combo.currentIndex())
         s.setValue("force_jpeg",       self.jpeg_check.isChecked())
         s.setValue("compress_format",  self.compress_combo.currentIndex())
+        s.setValue("per_folder",       self.per_folder_check.isChecked())
+        s.setValue("edit_name",        self.edit_name_check.isChecked())
         s.setValue("xtc_bit",          self.xtc_bit_combo.currentIndex())
         s.setValue("xtc_dir",          self.xtc_dir_combo.currentIndex())
         s.setValue("clean_algo",       self.clean_algo_combo.currentIndex())
@@ -1554,6 +1678,12 @@ class ImageEditorApp(QMainWindow):
         self.output_format_combo.setCurrentIndex(s.value("output_format", 0,  type=int))
         self.jpeg_check.setChecked(        s.value("force_jpeg",       False, type=bool))
         self.compress_combo.setCurrentIndex(s.value("compress_format", 0,    type=int))
+        self.per_folder_check.setChecked(  s.value("per_folder",        False, type=bool))
+        # blockSignals で toggled シグナル発火を抑制し、後で1回だけ on_edit_name_changed を呼ぶ
+        self.edit_name_check.blockSignals(True)
+        self.edit_name_check.setChecked(   s.value("edit_name",         True,  type=bool))
+        self.edit_name_check.blockSignals(False)
+        self.on_edit_name_changed(self.edit_name_check.isChecked())
         self.xtc_bit_combo.setCurrentIndex(s.value("xtc_bit",          0,    type=int))
         self.xtc_dir_combo.setCurrentIndex(s.value("xtc_dir",          1,    type=int))
         self.clean_algo_combo.setCurrentIndex(s.value("clean_algo",    0,    type=int))
@@ -1569,6 +1699,12 @@ class ImageEditorApp(QMainWindow):
             self._lang_combo.blockSignals(False)
             self._apply_language()
 
+    def _allocate_source_id(self) -> int:
+        """新しいソースIDを発行する。同名フォルダ衝突時のグループ識別に使用。"""
+        sid = self._next_source_id
+        self._next_source_id += 1
+        return sid
+
     def _clear_temp_dirs(self):
         for d in self._temp_dirs:
             if os.path.exists(d):
@@ -1580,6 +1716,7 @@ class ImageEditorApp(QMainWindow):
         self._stop_trim_detection()
         self.image_list_widget.clear()
         self.crop_rects.clear()
+        self._next_source_id = 0
         self._current_crop_key = None
         self._current_raw_preview = None
         self._release_preview_image()
@@ -1651,8 +1788,10 @@ class ImageEditorApp(QMainWindow):
             self.current_preview_image = None
 
     def handle_folder_load(self, path):
-        self.extract_metadata_from_name(os.path.basename(path))
-        self._add_images_from_folder(path, os.path.basename(path))
+        # 画像一覧が空の場合のみメタデータを取得（最初にドロップしたソースから取得）
+        if self.image_list_widget.count() == 0:
+            self.extract_metadata_from_name(os.path.basename(path))
+        self._add_images_from_folder(path, os.path.basename(path), self._allocate_source_id())
         self._update_path_display()
 
     def handle_zip_load(self, path):
@@ -1660,7 +1799,8 @@ class ImageEditorApp(QMainWindow):
             name = os.path.basename(path)
             if name.lower().endswith(".zip"):
                 name = name[:-4]
-            self.extract_metadata_from_name(name)
+            if self.image_list_widget.count() == 0:
+                self.extract_metadata_from_name(name)
 
             temp_dir = tempfile.mkdtemp(prefix="img_editor_")
             with zipfile.ZipFile(path, 'r') as zip_ref:
@@ -1672,7 +1812,7 @@ class ImageEditorApp(QMainWindow):
                         raise ValueError(f"不正なパスを含むZIP: {info.filename}")
                 zip_ref.extractall(temp_dir)
             self._temp_dirs.append(temp_dir)
-            self._add_images_from_folder(temp_dir, name)
+            self._add_images_from_folder(temp_dir, name, self._allocate_source_id())
             self._update_path_display()
         except Exception as e:
             QMessageBox.critical(self, _tr("dlg_error", self._lang), _tr("msg_zip_fail", self._lang, e=e))
@@ -1682,6 +1822,9 @@ class ImageEditorApp(QMainWindow):
         sources = set()
         for i in range(self.image_list_widget.count()):
             sources.add(self.image_list_widget.item(i).data(Qt.UserRole + 1))
+        # 編集無効時はソースラベルが出力名に使われるため、プレビューも更新する
+        if not self.edit_name_check.isChecked():
+            self._update_output_name_preview()
         if len(sources) == 0:
             self.path_edit.setText("")
         elif len(sources) == 1:
@@ -1701,7 +1844,7 @@ class ImageEditorApp(QMainWindow):
 
     _VALID_IMAGE_EXTS = (".jpg", ".jpeg", ".png", ".bmp", ".webp")
 
-    def _add_images_from_folder(self, folder: str, source_label: str):
+    def _add_images_from_folder(self, folder: str, source_label: str, source_id: int):
         """フォルダ内の画像をリストに追加する（既存アイテムはクリアしない）"""
         was_empty = self.image_list_widget.count() == 0
         try:
@@ -1724,6 +1867,7 @@ class ImageEditorApp(QMainWindow):
                 item.setData(Qt.UserRole, abs_path)
                 item.setData(Qt.UserRole + 1, source_label)
                 item.setData(Qt.UserRole + 2, rel_display)
+                item.setData(Qt.UserRole + 3, source_id)
                 self.image_list_widget.addItem(item)
 
             # リストが空だった場合のみ、1枚目の解像度を初期値にセット
@@ -1747,19 +1891,25 @@ class ImageEditorApp(QMainWindow):
             QMessageBox.critical(self, _tr("dlg_error", self._lang), _tr("msg_load_fail", self._lang, e=e))
 
     def _add_image_files(self, file_paths: list[str]):
-        """個別の画像ファイルをリストに追加する"""
+        """個別の画像ファイルをリストに追加する。親フォルダ単位で source_id を割り当てる。"""
         was_empty = self.image_list_widget.count() == 0
         added = []
+        parent_to_id: dict[str, int] = {}  # 絶対パスの親ディレクトリ -> source_id
         for path in file_paths:
             if not path.lower().endswith(self._VALID_IMAGE_EXTS):
                 continue
             abs_path = os.path.abspath(path)
-            source_label = os.path.basename(os.path.dirname(abs_path))
+            parent_dir = os.path.dirname(abs_path)
+            if parent_dir not in parent_to_id:
+                parent_to_id[parent_dir] = self._allocate_source_id()
+            source_id = parent_to_id[parent_dir]
+            source_label = os.path.basename(parent_dir)
             rel_display = os.path.basename(abs_path)
             item = QListWidgetItem(rel_display)
             item.setData(Qt.UserRole, abs_path)
             item.setData(Qt.UserRole + 1, source_label)
             item.setData(Qt.UserRole + 2, rel_display)
+            item.setData(Qt.UserRole + 3, source_id)
             self.image_list_widget.addItem(item)
             added.append(abs_path)
 
@@ -2004,9 +2154,13 @@ class ImageEditorApp(QMainWindow):
             return
 
         current_images = []
+        current_source_labels = []
+        current_source_ids = []
         for i in range(self.image_list_widget.count()):
             item = self.image_list_widget.item(i)
             current_images.append(item.data(Qt.UserRole))
+            current_source_labels.append(item.data(Qt.UserRole + 1))
+            current_source_ids.append(item.data(Qt.UserRole + 3))
 
         self.run_btn.setEnabled(False)
         self.progress_bar.setVisible(True)
@@ -2014,15 +2168,29 @@ class ImageEditorApp(QMainWindow):
 
         format_idx = self.output_format_combo.currentIndex()
 
-        # 出力名: [著者名] タイトル 形式で構築
+        # 出力名の構築
+        # 編集モード ON: [著者] タイトル 形式
+        # 編集モード OFF + per_folder OFF: 最初のソースラベル
+        # 編集モード OFF + per_folder ON: ProcessingThread 側で各グループのラベルを使用
         title = self.epub_title_edit.text().strip()
         author = self.epub_author_edit.text().strip()
-        if author and title:
-            output_name = f"[{author}] {title}"
-        elif title:
-            output_name = title
+        edit_name_enabled = self.edit_name_check.isChecked()
+        per_folder_enabled = self.per_folder_check.isChecked()
+        use_source_label_per_group = (not edit_name_enabled) and per_folder_enabled
+
+        if edit_name_enabled:
+            if author and title:
+                output_name = f"[{author}] {title}"
+            elif title:
+                output_name = title
+            else:
+                output_name = ""
         else:
-            output_name = ""
+            # 編集無効: 最初のソースラベルを使う（per_folder時は ProcessingThread で上書きされる）
+            output_name = current_source_labels[0] if current_source_labels else ""
+        # ファイル名として無効な文字をサニタイズ（出力名が空の場合はそのまま空とする）
+        if output_name:
+            output_name = _sanitize_filename(output_name)
 
         # 圧縮形式 (個別画像時のみ有効)
         compress_idx = self.compress_combo.currentIndex()
@@ -2072,7 +2240,11 @@ class ImageEditorApp(QMainWindow):
             clahe=self.clahe_slider.value(),
             no_resize=self.no_resize_check.isChecked(),
             output_name=output_name,
-            compress_format=compress_format
+            compress_format=compress_format,
+            source_labels=current_source_labels,
+            source_ids=current_source_ids,
+            per_folder=per_folder_enabled,
+            use_source_label=use_source_label_per_group
         )
         self._error_log = []
         self.thread.progress.connect(self.update_progress)

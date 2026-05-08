@@ -245,8 +245,11 @@ Xteink 電子書籍リーダー向けに、漫画・自炊画像を最適化・�
 | `trim_enabled` | `trim_check` | false |
 | `preview_mode` | `_preview_mode` | "output" |
 | `language` | `_lang` | "ja" |
+| `per_folder` | `per_folder_check` | false |
+| `edit_name` | `edit_name_check` | true |
 
 > **読み込み順序の依存関係**: `no_resize` → `width`/`height` → `preset_index` の順で読み込む。`on_preset_changed` 内で `no_resize_check` の状態を参照するため。旧設定キー `x4_preset` からの自動移行にも対応。
+> **`edit_name` の復元**: `setChecked` を `blockSignals` で囲み、その後 `on_edit_name_changed` を明示呼び出しで1回だけ反映する（`toggled` シグナルとの二重実行防止）。
 
 ## 4. 高速化の実装詳細
 
@@ -375,6 +378,30 @@ Phase 1（タスク展開）→ Phase 2（`ThreadPoolExecutor` で並列実行�
     - `TrimDetectThread` 停止時、`wait(3000)` タイムアウト時に `terminate()` を呼び出して確実に停止させるよう改善。
     - `refresh_preview` の PIL Image 判定を `not obj` から `is None` に明示化。
     - `save_xth` のピクセル処理を Python リスト逐次ループから NumPy 配列ベクトル演算に置き換え、大幅に高速化。
+26. **M5Paper S3 プリセット追加**:
+    - プリセット選択コンボボックスに `M5Paper S3 (540×960)` を追加。`_PRESET_SIZES = {1: (528,792), 2: (480,800), 3: (540,960)}`。
+27. **メタデータ取得の挙動変更**:
+    - フォルダ/ZIP 読み込み時の `extract_metadata_from_name` 呼び出しを、画像一覧が空の場合のみに限定。複数ソース順次追加時にユーザー編集中のタイトル・著者欄が上書きされないように改善。
+28. **ソート挙動の改善**:
+    - `_sort_list_widget` のソートキーを絶対パスから `(ソースラベル, 相対パス)` の複合キーに変更。同一ソースの画像が必ずグループとしてまとまり、`per_folder` の挙動と整合する。
+29. **フォルダごとに保存機能（バッチ処理）**:
+    - 「7. 保存形式」グループに「フォルダごとに保存」チェックボックスを追加。
+    - 有効時は画像一覧を**ソースID単位**でグループ化し、グループごとに `batch_process` を呼び出す。
+    - 出力名は「編集する」モードに応じて切替: ON時は `<入力名>_<連番>` (3桁ゼロパディング)、OFF時は各グループのソースラベルをそのまま使用。
+    - グループが1つのみの場合は通常パスにフォールバック（連番なし）。
+    - 進捗バーは画像単位の全グループ通算（`processed_offset` で累積）。
+    - 同名フォルダ衝突対策として、各ソース読み込み時に `_allocate_source_id` で一意なIDを発行し `Qt.UserRole + 3` に保存。`DraggableListWidget.dropEvent` / `_sort_list_widget` でも保持。
+30. **「編集する」チェックボックス**:
+    - 「6. 出力ファイル/フォルダ名」グループに「編集する」チェックボックスを追加（デフォルトON）。
+    - OFF時はタイトル・著者欄を `setEnabled(False)` で無効化し、出力名を以下で決定:
+      - `フォルダごとに保存` OFF: 最初のソースラベル（`current_source_labels[0]`）
+      - `フォルダごとに保存` ON: 各グループのソースラベル（連番なし）
+    - `_update_output_name_preview` を編集モードに応じてベース名を切替。
+    - `load_settings` 時は `blockSignals` で `toggled` シグナル発火を抑制し、明示呼び出しで1回だけ反映。
+31. **ファイル名サニタイズ（第15回レビュー対応）**:
+    - モジュールレベルに `_sanitize_filename(name)` を追加。Windows予約文字 `<>:"/\|?*` および末尾のドット/空白を除去し、空文字時は `untitled` を返す。
+    - `start_processing` の `output_name` 構築時、および `ProcessingThread.run` の per_folder グループ名構築時に適用。
+    - ソースラベルが空の場合の警告ログ出力（`per_folder` モード時）。
 
 ## 6. 今後の拡張アイデア
 

@@ -17,9 +17,10 @@ A desktop application for optimizing and converting manga and scanned images for
 - **Auto margin detection & manual adjustment**: Drag crop handles to fine-tune
 - **Auto split**: Automatically split spread pages into two based on aspect ratio
 - **Dithering**: Floyd-Steinberg / Atkinson / Sauvola algorithms (1-bit / 2-bit / 8-bit)
-- **Device presets**: Built-in resolution presets for Xteink X3 (528x792) and X4 (480x800)
+- **Device presets**: Built-in resolution presets for Xteink X3 (528x792), X4 (480x800), and M5Paper S3 (540x960)
+- **Save per folder**: Batch mode — each source folder produces its own output file with auto-numbered names
 - **No-resize mode**: For sorting, renaming, and packing images without resizing
-- **Auto metadata extraction**: Parses `[Author] Title` from folder/ZIP names
+- **Auto metadata extraction**: Parses `[Author] Title` from folder/ZIP names. Editable / non-edit toggle for output name
 - **Japanese / English UI**: Switch language from the settings panel
 - **Persistent settings**: All settings are saved to the registry and restored on next launch
 
@@ -70,6 +71,16 @@ For details on the XTG / XTH / XTC / XTCH formats used by Xteink devices:
 - [XTC-XTG-XTH-XTCH_jp.md](XTC-XTG-XTH-XTCH_jp.md) (Japanese)
 
 ## Changelog
+
+### 2026-05-08
+
+- Added M5Paper S3 (540x960) device preset
+- Added "Save per Folder" mode for batch output (one output file per source folder, with auto-numbered names)
+- Added "Edit name" toggle in output name section — when off, uses source folder/file name directly
+- Sort now preserves source-label grouping (sorts by source label first, then by file name)
+- Metadata auto-fill now occurs only on the first source load (subsequent loads do not overwrite user edits)
+- Added filename sanitization for Windows-invalid characters in output names
+- Internal source ID now distinguishes same-named folders from different paths
 
 ### 2026-04-04
 
