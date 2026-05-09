@@ -247,6 +247,8 @@ Xteink 電子書籍リーダー向けに、漫画・自炊画像を最適化・�
 | `language` | `_lang` | "ja" |
 | `per_folder` | `per_folder_check` | false |
 | `edit_name` | `edit_name_check` | true |
+| `split_target` | `_split_target` | 0 (両方) |
+| `split_order_h` | `_split_order_h` | 0 (左→右) |
 
 > **読み込み順序の依存関係**: `no_resize` → `width`/`height` → `preset_index` の順で読み込む。`on_preset_changed` 内で `no_resize_check` の状態を参照するため。旧設定キー `x4_preset` からの自動移行にも対応。
 > **`edit_name` の復元**: `setChecked` を `blockSignals` で囲み、その後 `on_edit_name_changed` を明示呼び出しで1回だけ反映する（`toggled` シグナルとの二重実行防止）。
@@ -402,6 +404,28 @@ Phase 1（タスク展開）→ Phase 2（`ThreadPoolExecutor` で並列実行�
     - モジュールレベルに `_sanitize_filename(name)` を追加。Windows予約文字 `<>:"/\|?*` および末尾のドット/空白を除去し、空文字時は `untitled` を返す。
     - `start_processing` の `output_name` 構築時、および `ProcessingThread.run` の per_folder グループ名構築時に適用。
     - ソースラベルが空の場合の警告ログ出力（`per_folder` モード時）。
+32. **自動分割の仕様拡張（右綴じ漫画対応）**:
+    - 「自動分割」チェックの右にコンパクトトグルボタン2つを追加:
+      - **適用対象**（`split_target`）: `両方` / `左右のみ` / `上下のみ` の3状態サイクル。横長/縦長のみ分割を限定可能。
+      - **左右分割の順序**（`split_order_h`）: `左→右` / `右→左` の2状態サイクル。右綴じ漫画では `右→左` を選択。
+    - 上下分割は常に `上→下` 固定。
+    - ボタン幅は `QFontMetrics.horizontalAdvance` で全状態テキストの最大幅を計算して `setFixedWidth` で固定（言語切替時は `_update_split_btn_widths` で再計算）。
+    - 専用 QSS objectName `compactToggleButton` で `padding: 2px 6px; min-width: 0px` を上書き。
+    - 自動分割 OFF 時は両トグルボタンを `setEnabled(False)` で無効化。
+    - 設定値は `QSettings` で永続化（`split_target`、`split_order_h`、デフォルト 0/0）。
+33. **分割画像のファイル名統一**:
+    - 出力ファイル名 suffix を `_left`/`_right`/`_top`/`_bot` から `_1`/`_2` に統一。
+    - `image_processor.batch_process` 内で `enumerate(sub_images, start=1)` でインデックス付与し `file_suffix = f"_{sub_idx}"` として使用。
+    - 内部キー（`crop_rects` のキー、プレビュー識別子）は `"left"/"right"/"top"/"bot"` のまま維持し、ファイル名生成時のみ別変数で数字 suffix を採用。
+34. **プレビュー分割切替ボタンの改善**:
+    - ラベルをアスペクト比に応じた動的書き換え（「上半分/下半分」「左半分/右半分」）から固定の「1番目/2番目」（en: `Page 1`/`Page 2`）に変更。
+    - 順序設定を反映: `split_order_h == 1` (右→左) の場合、1番目 = right、2番目 = left となるようプレビュー側で切替。
+    - 専用 QSS objectName `splitToggleButton` で `:checked` ハイライト（`#0066cc` 背景、白文字、太字）を実装。
+    - 分割対象外画像表示時はボタンを `setEnabled(False)` で無効化。`:checked:disabled` セレクタを追加してハイライトの残留を防止。
+    - `_split_preview_half` の値はボタンの enabled/disabled に関わらず維持され、再度分割対象画像に戻った際にチェック状態を復元。
+35. **自動分割関連の改善（第18回レビュー対応）**:
+    - `TrimDetectThread` に `split_target` 引数を追加し、`apply_split` 判定をプレビュー・`batch_process` と同一ロジックで実装。`split_target=1` で縦長画像、または `split_target=2` で横長画像があっても、不要な分割クロップ検出が走らず suffix=`""` で全体検出される。
+    - `_on_split_target_toggle` で `crop_rects.clear()` を削除し、`_start_trim_detection(clear_existing=False)` で既存クロップ矩形を保持。設定切替で意味が変わるキーは未参照のままメモリ上に残るが、ユーザー手動編集が消失しない。
 
 ## 6. 今後の拡張アイデア
 

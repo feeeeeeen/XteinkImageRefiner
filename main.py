@@ -21,7 +21,7 @@ from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout,
                              QFileDialog, QListWidget, QListWidgetItem,
                              QGroupBox, QSpinBox, QCheckBox, QProgressBar,
                              QMessageBox, QScrollArea, QSlider, QSplitter, QComboBox,
-                             QStyle)
+                             QStyle, QSizePolicy)
 from PySide6.QtCore import Qt, QThread, Signal, QTimer, QSettings, QRectF
 from PySide6.QtGui import QPixmap, QImage, QDragEnterEvent, QDropEvent, QPainter, QPen, QColor, QBrush
 from image_processor import batch_process, apply_processing, apply_bit_dithering, apply_cv2_cleaning, Image
@@ -82,10 +82,13 @@ _TRANSLATIONS = {
     "btn_clear":            {"ja": "全消去",                  "en": "Clear All"},
     "btn_preprocess":       {"ja": "前処理",                  "en": "Preprocess"},
     "btn_output":           {"ja": "出力",                    "en": "Output"},
-    "btn_top_half":         {"ja": "上半分",                  "en": "Top Half"},
-    "btn_bot_half":         {"ja": "下半分",                  "en": "Bot Half"},
-    "btn_left_half":        {"ja": "左半分",                  "en": "Left Half"},
-    "btn_right_half":       {"ja": "右半分",                  "en": "Right Half"},
+    "btn_first_page":       {"ja": "1番目",                   "en": "Page 1"},
+    "btn_second_page":      {"ja": "2番目",                   "en": "Page 2"},
+    "btn_split_target_both":{"ja": "両方",                    "en": "Both"},
+    "btn_split_target_lr":  {"ja": "左右のみ",                "en": "L/R only"},
+    "btn_split_target_tb":  {"ja": "上下のみ",                "en": "T/B only"},
+    "btn_split_order_lr":   {"ja": "左→右",                   "en": "L→R"},
+    "btn_split_order_rl":   {"ja": "右→左",                   "en": "R→L"},
     # コンボボックスアイテム
     "combo_center":         {"ja": "中央寄せ",                "en": "Center"},
     "combo_top":            {"ja": "上寄せ",                  "en": "Top"},
@@ -147,7 +150,7 @@ class ProcessingThread(QThread):
     finished = Signal(list)
     log = Signal(str)
 
-    def __init__(self, image_list, output_dir, max_width, max_height, prefix, use_grayscale, bits, use_rename, force_jpeg, epub_settings=None, xtc_settings=None, alignment="center", auto_split=False, blur_strength=0, contrast=0, crop_rects=None, auto_rotate=False, sharpen=0, clahe=0, no_resize=False, output_name="", compress_format="", source_labels=None, source_ids=None, per_folder=False, use_source_label=False):
+    def __init__(self, image_list, output_dir, max_width, max_height, prefix, use_grayscale, bits, use_rename, force_jpeg, epub_settings=None, xtc_settings=None, alignment="center", auto_split=False, blur_strength=0, contrast=0, crop_rects=None, auto_rotate=False, sharpen=0, clahe=0, no_resize=False, output_name="", compress_format="", source_labels=None, source_ids=None, per_folder=False, use_source_label=False, split_target=0, split_order_h=0):
         super().__init__()
         self.image_list = image_list
         self.output_dir = output_dir
@@ -175,6 +178,8 @@ class ProcessingThread(QThread):
         self.source_ids = source_ids        # image_list と同じ長さ。グルーピングの一意識別子
         self.per_folder = per_folder
         self.use_source_label = use_source_label  # True の場合、グループラベルを出力名に使用（連番なし）
+        self.split_target = split_target          # 自動分割の適用対象 (0=両方, 1=左右のみ, 2=上下のみ)
+        self.split_order_h = split_order_h        # 横長分割の順序 (0=左→右, 1=右→左)
 
     def _group_by_source(self):
         """画像一覧の順序を保ったまま、ソースID単位でグループ化する。
@@ -220,7 +225,9 @@ class ProcessingThread(QThread):
                     clahe=self.clahe,
                     no_resize=self.no_resize,
                     output_name=self.output_name,
-                    compress_format=self.compress_format
+                    compress_format=self.compress_format,
+                    split_target=self.split_target,
+                    split_order_h=self.split_order_h
                 )
             else:
                 # グループごとに batch_process を呼び出し、進捗を全画像通算で発火する
@@ -264,7 +271,9 @@ class ProcessingThread(QThread):
                         clahe=self.clahe,
                         no_resize=self.no_resize,
                         output_name=group_output_name,
-                        compress_format=self.compress_format
+                        compress_format=self.compress_format,
+                        split_target=self.split_target,
+                        split_order_h=self.split_order_h
                     )
                     results.extend(grp_results)
                     processed_offset[0] += len(paths)
@@ -280,10 +289,11 @@ class TrimDetectThread(QThread):
     detected = Signal(str, str, tuple)  # (abs_path, suffix, crop_rect)
     all_done = Signal()
 
-    def __init__(self, image_paths: list[str], auto_split: bool):
+    def __init__(self, image_paths: list[str], auto_split: bool, split_target: int = 0):
         super().__init__()
         self.image_paths = list(image_paths)
         self.auto_split = auto_split
+        self.split_target = split_target  # 0=両方, 1=左右のみ, 2=上下のみ
         self._abort = False
 
     def abort(self):
@@ -301,18 +311,27 @@ class TrimDetectThread(QThread):
 
                 if self.auto_split:
                     w, h = img.size
-                    if w >= h:  # 横長 → 左右分割
+                    is_landscape = (w >= h)
+                    apply_split = (
+                        self.split_target == 0  # 両方
+                        or (self.split_target == 1 and is_landscape)   # 左右のみ
+                        or (self.split_target == 2 and not is_landscape)  # 上下のみ
+                    )
+                    if apply_split and is_landscape:
                         left_img, right_img = split_image_left_right(img)
                         self.detected.emit(full_path, "left", detect_trim_rect_fast(left_img))
                         if self._abort:
                             return
                         self.detected.emit(full_path, "right", detect_trim_rect_fast(right_img))
-                    else:  # 縦長 → 上下分割
+                    elif apply_split and not is_landscape:
                         top_img, bot_img = split_image_top_bottom(img)
                         self.detected.emit(full_path, "top", detect_trim_rect_fast(top_img))
                         if self._abort:
                             return
                         self.detected.emit(full_path, "bot", detect_trim_rect_fast(bot_img))
+                    else:
+                        # 分割対象外: 分割しないので suffix="" で全体検出
+                        self.detected.emit(full_path, "", detect_trim_rect_fast(img))
                 else:
                     self.detected.emit(full_path, "", detect_trim_rect_fast(img))
             except Exception:
@@ -673,6 +692,8 @@ class ImageEditorApp(QMainWindow):
         self._preview_mode: str = "output"  # "preprocess" | "output"
         self._lang: str = "ja"  # 現在の言語 ("ja" | "en")
         self._next_source_id: int = 0  # 各ソース読み込みに割り当てる一意なID
+        self._split_target: int = 0    # 自動分割の適用対象 (0=両方, 1=左右のみ, 2=上下のみ)
+        self._split_order_h: int = 0   # 横長分割の順序 (0=左→右, 1=右→左)
 
         # プレビュー更新デバウンスタイマー (300ms)
         self._preview_timer = QTimer(self)
@@ -771,9 +792,27 @@ class ImageEditorApp(QMainWindow):
         preproc_vbox = QVBoxLayout(self._preproc_group)
         preproc_vbox.setContentsMargins(4, 1, 4, 2)
         preproc_vbox.setSpacing(2)
+        split_row = QHBoxLayout()
+        split_row.setContentsMargins(0, 0, 0, 0)
+        split_row.setSpacing(6)
         self.split_check = QCheckBox(_tr("chk_auto_split", self._lang))
         self.split_check.stateChanged.connect(self._on_split_changed)
-        preproc_vbox.addWidget(self.split_check)
+        split_row.addWidget(self.split_check)
+        # 自動分割の適用対象トグル（両方 / 左右のみ / 上下のみ）
+        self.split_target_btn = QPushButton(_tr("btn_split_target_both", self._lang))
+        self.split_target_btn.setObjectName("compactToggleButton")
+        self.split_target_btn.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
+        self.split_target_btn.clicked.connect(self._on_split_target_toggle)
+        split_row.addWidget(self.split_target_btn)
+        # 左右分割の順序トグル（左→右 / 右→左）
+        self.split_order_btn = QPushButton(_tr("btn_split_order_lr", self._lang))
+        self.split_order_btn.setObjectName("compactToggleButton")
+        self.split_order_btn.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
+        self.split_order_btn.clicked.connect(self._on_split_order_toggle)
+        split_row.addWidget(self.split_order_btn)
+        self._update_split_btn_widths()
+        split_row.addStretch()
+        preproc_vbox.addLayout(split_row)
         self.auto_rotate_check = QCheckBox(_tr("chk_auto_rotate", self._lang))
         self.auto_rotate_check.stateChanged.connect(self.refresh_preview)
         preproc_vbox.addWidget(self.auto_rotate_check)
@@ -1207,12 +1246,14 @@ class ImageEditorApp(QMainWindow):
 
         # 分割プレビュー切り替えボタン（トリミング＋分割有効時のみ表示）
         split_toggle_layout = QHBoxLayout()
-        self.split_top_btn = QPushButton(_tr("btn_top_half", self._lang))
+        self.split_top_btn = QPushButton(_tr("btn_first_page", self._lang))
+        self.split_top_btn.setObjectName("splitToggleButton")
         self.split_top_btn.setCheckable(True)
         self.split_top_btn.setChecked(True)
         self.split_top_btn.clicked.connect(lambda: self._set_split_half("first"))
         split_toggle_layout.addWidget(self.split_top_btn)
-        self.split_bot_btn = QPushButton(_tr("btn_bot_half", self._lang))
+        self.split_bot_btn = QPushButton(_tr("btn_second_page", self._lang))
+        self.split_bot_btn.setObjectName("splitToggleButton")
         self.split_bot_btn.setCheckable(True)
         self.split_bot_btn.clicked.connect(lambda: self._set_split_half("second"))
         split_toggle_layout.addWidget(self.split_bot_btn)
@@ -1325,8 +1366,12 @@ class ImageEditorApp(QMainWindow):
         self._clear_all_btn.setText(_tr("btn_clear", lang))
         self.preprocess_btn.setText(_tr("btn_preprocess", lang))
         self.output_btn.setText(_tr("btn_output", lang))
-        self.split_top_btn.setText(_tr("btn_top_half", lang))
-        self.split_bot_btn.setText(_tr("btn_bot_half", lang))
+        self.split_top_btn.setText(_tr("btn_first_page", lang))
+        self.split_bot_btn.setText(_tr("btn_second_page", lang))
+        # 分割関連トグルボタンのテキスト更新と最大幅再計算
+        self._update_split_btn_widths()
+        self._update_split_target_btn_text()
+        self._update_split_order_btn_text()
 
         # コンボボックスアイテム（選択中インデックスを保持して入れ替え）
         def _update_combo(combo, items):
@@ -1365,6 +1410,9 @@ class ImageEditorApp(QMainWindow):
     def _on_split_changed(self):
         is_split = self.split_check.isChecked()
         self.split_toggle_widget.setVisible(is_split)
+        # 自動分割OFF時は分割関連トグルボタンを無効化
+        self.split_target_btn.setEnabled(is_split)
+        self.split_order_btn.setEnabled(is_split)
         if not is_split:
             self._split_preview_half = "first"
             self.split_top_btn.setChecked(True)
@@ -1372,6 +1420,48 @@ class ImageEditorApp(QMainWindow):
         self.crop_rects.clear()
         if self.trim_check.isChecked():
             self._start_trim_detection()
+        self.refresh_preview()
+
+    def _update_split_btn_widths(self):
+        """分割関連トグルボタンを「全状態テキストの最大幅」で固定する。
+        言語切替や初期化時に呼び出し、テキスト変動による幅の揺れを抑える。"""
+        # 適用対象（3状態）
+        target_texts = [_tr(k, self._lang) for k in
+                        ("btn_split_target_both", "btn_split_target_lr", "btn_split_target_tb")]
+        fm = self.split_target_btn.fontMetrics()
+        # padding(2+6+6+2≈16) + 余裕(8) を加算
+        target_w = max(fm.horizontalAdvance(t) for t in target_texts) + 24
+        self.split_target_btn.setFixedWidth(target_w)
+        # 順序（2状態）
+        order_texts = [_tr(k, self._lang) for k in ("btn_split_order_lr", "btn_split_order_rl")]
+        order_w = max(fm.horizontalAdvance(t) for t in order_texts) + 24
+        self.split_order_btn.setFixedWidth(order_w)
+
+    def _update_split_target_btn_text(self):
+        keys = ["btn_split_target_both", "btn_split_target_lr", "btn_split_target_tb"]
+        self.split_target_btn.setText(_tr(keys[self._split_target], self._lang))
+
+    def _update_split_order_btn_text(self):
+        key = "btn_split_order_lr" if self._split_order_h == 0 else "btn_split_order_rl"
+        self.split_order_btn.setText(_tr(key, self._lang))
+
+    def _on_split_target_toggle(self):
+        # 0=両方 → 1=左右のみ → 2=上下のみ → 0 のサイクル
+        self._split_target = (self._split_target + 1) % 3
+        self._update_split_target_btn_text()
+        # crop_rects は保持し、ユーザーが手動調整したクロップ矩形が失われないようにする。
+        # 設定変更で意味が変わるキー（例: split_target=1で縦長画像のtop/bot）は参照されなくなるが、
+        # 再度該当設定に戻った際に復元できるためメモリ上で保持する。不足分は on-demand 検出で補う。
+        if self.trim_check.isChecked() and self.split_check.isChecked():
+            # 既存の crop_rects は保持しつつ、新たな suffix が必要な分だけ検出を再実行
+            self._start_trim_detection(clear_existing=False)
+        self.refresh_preview()
+
+    def _on_split_order_toggle(self):
+        # 0=左→右 ⇄ 1=右→左
+        self._split_order_h = 1 - self._split_order_h
+        self._update_split_order_btn_text()
+        # クロップ矩形のキー（left/right）はそのまま、プレビューの再描画のみで対応
         self.refresh_preview()
 
     def _on_trim_changed(self):
@@ -1415,7 +1505,7 @@ class ImageEditorApp(QMainWindow):
         abs_paths = [self.image_list_widget.item(i).data(Qt.UserRole)
                      for i in range(self.image_list_widget.count())]
         self._trim_detect_thread = TrimDetectThread(
-            abs_paths, self.split_check.isChecked()
+            abs_paths, self.split_check.isChecked(), self._split_target
         )
         self._trim_detect_thread.detected.connect(self._on_trim_detected)
         self._trim_detect_thread.all_done.connect(self._on_trim_all_done)
@@ -1628,6 +1718,8 @@ class ImageEditorApp(QMainWindow):
         s.setValue("alignment",        self.alignment_combo.currentIndex())
         s.setValue("sharpen",          self.sharpen_slider.value())
         s.setValue("split",            self.split_check.isChecked())
+        s.setValue("split_target",     self._split_target)
+        s.setValue("split_order_h",    self._split_order_h)
         s.setValue("auto_rotate",      self.auto_rotate_check.isChecked())
         s.setValue("grayscale",        self.gray_check.isChecked())
         s.setValue("bits",             self.bits_spin.value())
@@ -1665,6 +1757,14 @@ class ImageEditorApp(QMainWindow):
         self.alignment_combo.setCurrentIndex(s.value("alignment",       0,    type=int))
         self.sharpen_slider.setValue(      s.value("sharpen",          0,    type=int))
         self.split_check.setChecked(       s.value("split",            False, type=bool))
+        # 自動分割の適用対象・順序の復元
+        self._split_target = max(0, min(2, s.value("split_target",    0, type=int)))
+        self._split_order_h = max(0, min(1, s.value("split_order_h",  0, type=int)))
+        self._update_split_target_btn_text()
+        self._update_split_order_btn_text()
+        # split_check の現在値に応じてトグルボタンの有効/無効を反映
+        self.split_target_btn.setEnabled(self.split_check.isChecked())
+        self.split_order_btn.setEnabled(self.split_check.isChecked())
         self.auto_rotate_check.setChecked( s.value("auto_rotate",      False, type=bool))
         self.blur_slider.setValue(         s.value("blur_strength",     0,    type=int))
         self.gray_check.setChecked(        s.value("grayscale",        False, type=bool))
@@ -2013,18 +2113,39 @@ class ImageEditorApp(QMainWindow):
 
         if self.split_check.isChecked():
             w, h = preview_src.size
-            if w >= h:  # 横長 → 左右分割
+            is_landscape = (w >= h)
+            apply_split = (
+                self._split_target == 0  # 両方
+                or (self._split_target == 1 and is_landscape)   # 左右のみ
+                or (self._split_target == 2 and not is_landscape)  # 上下のみ
+            )
+            # 分割が実際に適用されるかどうかでプレビュー切替ボタンの有効/無効を制御
+            self.split_top_btn.setEnabled(apply_split)
+            self.split_bot_btn.setEnabled(apply_split)
+            # 分割対象画像のときは _split_preview_half の現在値をボタンの選択状態に反映
+            # （分割対象外の画像を経由しても、戻った時に正しいハイライトが復元される）
+            if apply_split:
+                self.split_top_btn.setChecked(self._split_preview_half == "first")
+                self.split_bot_btn.setChecked(self._split_preview_half == "second")
+            if apply_split and is_landscape:
+                # 横長 → 左右分割。順序設定により1番目を切替
                 left_img, right_img = split_image_left_right(preview_src)
-                preview_src = right_img if self._split_preview_half == "second" else left_img
-                suffix = "right" if self._split_preview_half == "second" else "left"
-                self.split_top_btn.setText(_tr("btn_left_half", self._lang))
-                self.split_bot_btn.setText(_tr("btn_right_half", self._lang))
-            else:  # 縦長 → 上下分割
+                first_is_right = (self._split_order_h == 1)
+                first_img, first_suf = (right_img, "right") if first_is_right else (left_img, "left")
+                second_img, second_suf = (left_img, "left") if first_is_right else (right_img, "right")
+                if self._split_preview_half == "second":
+                    preview_src, suffix = second_img, second_suf
+                else:
+                    preview_src, suffix = first_img, first_suf
+            elif apply_split and not is_landscape:
+                # 縦長 → 上下分割。順序は上→下固定
                 top_img, bot_img = split_image_top_bottom(preview_src)
                 preview_src = bot_img if self._split_preview_half == "second" else top_img
                 suffix = "bot" if self._split_preview_half == "second" else "top"
-                self.split_top_btn.setText(_tr("btn_top_half", self._lang))
-                self.split_bot_btn.setText(_tr("btn_bot_half", self._lang))
+            else:
+                # 分割対象外: ボタンは disabled になるのでチェック状態は変更しない
+                # （_split_preview_half を維持し、再度分割対象画像に戻った際に復元）
+                suffix = ""
         else:
             suffix = ""
 
@@ -2244,7 +2365,9 @@ class ImageEditorApp(QMainWindow):
             source_labels=current_source_labels,
             source_ids=current_source_ids,
             per_folder=per_folder_enabled,
-            use_source_label=use_source_label_per_group
+            use_source_label=use_source_label_per_group,
+            split_target=self._split_target,
+            split_order_h=self._split_order_h
         )
         self._error_log = []
         self.thread.progress.connect(self.update_progress)

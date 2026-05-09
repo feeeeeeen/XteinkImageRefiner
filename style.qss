@@ -28,6 +28,27 @@ QPushButton:hover {
     background-color: #4d4d4d;
 }
 
+QPushButton#compactToggleButton {
+    padding: 2px 6px;
+    min-width: 0px;
+}
+
+QPushButton#splitToggleButton:checked {
+    background-color: #0066cc;
+    color: white;
+    font-weight: bold;
+}
+
+QPushButton#splitToggleButton:checked:hover {
+    background-color: #0080ff;
+}
+
+QPushButton#splitToggleButton:checked:disabled {
+    background-color: #2a2a2a;
+    color: #555555;
+    font-weight: normal;
+}
+
 QPushButton#primaryButton {
     background-color: #0066cc;
     color: white;

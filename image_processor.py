@@ -771,7 +771,8 @@ def batch_process(image_list: list[str], output_dir: str, max_width: int, max_he
                   alignment: str = "center", progress_callback: Optional[Callable[[int, int], None]] = None, log_callback: Optional[Callable[[str], None]] = None,
                   auto_split: bool = False, blur_strength: int = 0, contrast: int = 0,
                   crop_rects: dict | None = None, auto_rotate: bool = False, sharpen: int = 0, clahe: int = 0, no_resize: bool = False,
-                  output_name: str = "", compress_format: str = "") -> list[str]:
+                  output_name: str = "", compress_format: str = "",
+                  split_target: int = 0, split_order_h: int = 0) -> list[str]:
     """
     画像リストを並列処理し、保存する。
     Phase 1: 全タスクを逐次展開（画像読み込み・パス計算）
@@ -823,18 +824,33 @@ def batch_process(image_list: list[str], output_dir: str, max_width: int, max_he
                 raw_img.load()  # ファイルクローズ前に読み込み
                 if auto_split:
                     w, h = raw_img.size
-                    if w >= h:  # 横長 → 左右分割
+                    is_landscape = (w >= h)
+                    apply_split = (
+                        split_target == 0  # 両方
+                        or (split_target == 1 and is_landscape)   # 左右のみ
+                        or (split_target == 2 and not is_landscape)  # 上下のみ
+                    )
+                    if apply_split and is_landscape:
+                        # 横長 → 左右分割。順序は split_order_h で決定
                         left_img, right_img = split_image_left_right(raw_img)
-                        sub_images = [(left_img, "left"), (right_img, "right")]
-                    else:  # 縦長 → 上下分割
+                        if split_order_h == 1:  # 右→左
+                            sub_images = [(right_img, "right"), (left_img, "left")]
+                        else:                    # 左→右
+                            sub_images = [(left_img, "left"), (right_img, "right")]
+                    elif apply_split and not is_landscape:
+                        # 縦長 → 上下分割。順序は上→下固定
                         top_img, bot_img = split_image_top_bottom(raw_img)
                         sub_images = [(top_img, "top"), (bot_img, "bot")]
+                    else:
+                        sub_images = [(raw_img.copy(), "")]
                 else:
                     sub_images = [(raw_img.copy(), "")]
 
             sub_tasks: list[dict] = []
-            for sub_img, suffix in sub_images:
+            # ファイル名 suffix は分割時のみ "_1"/"_2" を付与（内部キー suffix とは別）
+            for sub_idx, (sub_img, suffix) in enumerate(sub_images, start=1):
                 global_idx += 1
+                file_suffix = f"_{sub_idx}" if suffix else ""
 
                 # 拡張子・ディザ・クリーン設定の決定
                 if is_xtc_enabled:
@@ -852,14 +868,12 @@ def batch_process(image_list: list[str], output_dir: str, max_width: int, max_he
                     c_algo = xtc_settings.get("clean_algo", "Median") if xtc_settings else "Median"
                     ext = ".jpg" if is_jpeg else orig_ext
 
-                # ファイル名の決定
+                # ファイル名の決定（分割時は _1 / _2 の数字 suffix を使用）
                 if use_rename:
-                    suf_str = f"_{suffix}" if suffix else ""
-                    new_name = f"{prefix}_{global_idx:03d}{suf_str}{ext}"
+                    new_name = f"{prefix}_{global_idx:03d}{file_suffix}{ext}"
                 else:
                     base_name = os.path.splitext(os.path.basename(file_path))[0]
-                    suf_str = f"_{suffix}" if suffix else ""
-                    new_name = f"{base_name}{suf_str}{ext}"
+                    new_name = f"{base_name}{file_suffix}{ext}"
 
                 # クロップ矩形の取得（トリミング有効時）
                 crop_rect = None

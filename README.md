@@ -72,6 +72,14 @@ For details on the XTG / XTH / XTC / XTCH formats used by Xteink devices:
 
 ## Changelog
 
+### 2026-05-09
+
+- Auto-split now supports target selection (Both / Landscape only / Portrait only) and horizontal page order (L→R / R→L) — useful for right-bound (RTL) manga
+- Split image filename suffix unified to `_1` / `_2` (was `_left/_right/_top/_bot`)
+- Preview split toggle buttons relabeled to "Page 1 / Page 2" with active-button highlight; disabled when the current image is not split
+- Manually adjusted crop rectangles are now preserved when toggling auto-split target (no longer cleared on target change)
+- Background trim detection now respects the auto-split target setting (avoids unnecessary detection of top/bot or left/right when target is restricted)
+
 ### 2026-05-08
 
 - Added M5Paper S3 (540x960) device preset
